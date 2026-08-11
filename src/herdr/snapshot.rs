@@ -117,6 +117,7 @@ pub fn build_source_snapshot(
         session,
         action,
         custom_patterns,
+        open: crate::model::OpenSettings::default(),
     })
 }
 

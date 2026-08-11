@@ -167,7 +167,9 @@ fn fit_to_width(text: &str, width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{PaneId, PaneTextCaptureMode, PickerReturnContext, SourcePaneSnapshot};
+    use crate::model::{
+        OpenSettings, PaneId, PaneTextCaptureMode, PickerReturnContext, SourcePaneSnapshot,
+    };
 
     fn snapshot(lines: Vec<&str>, width: u16, height: u16) -> PickerSnapshot {
         PickerSnapshot {
@@ -189,6 +191,7 @@ mod tests {
             },
             action: PickerAction::Copy,
             custom_patterns: Vec::new(),
+            open: OpenSettings::default(),
         }
     }
 
