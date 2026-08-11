@@ -127,7 +127,9 @@ fn emit_selection_failure(
 mod tests {
     use super::*;
     use crate::clipboard::{ClipboardError, CopySuccess};
-    use crate::model::{PaneId, PaneTextCaptureMode, PickerReturnContext, SourcePaneSnapshot};
+    use crate::model::{
+        OpenSettings, PaneId, PaneTextCaptureMode, PickerReturnContext, SourcePaneSnapshot,
+    };
     use crate::url_opener::{OpenUrlSuccess, UrlOpenError};
     use std::cell::RefCell;
 
@@ -210,6 +212,7 @@ mod tests {
             },
             action: PickerAction::Copy,
             custom_patterns: Vec::new(),
+            open: OpenSettings::default(),
         }
     }
 
