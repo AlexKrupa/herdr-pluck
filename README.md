@@ -206,8 +206,8 @@ exit is reported as an error. Two consequences for handlers:
 - A handler that creates a pane must name the source pane, as in
   `herdr pane split --pane "$HERDR_PLUCK_PANE_ID"`. A pane created in the focused tab lands in the
   temporary picker tab and disappears with it.
-- The picker overlay stays on screen until the command returns, so a handler that blocks blocks the
-  picker.
+- The picker overlay stays on screen until the command returns. A handler still running after 5
+  seconds is killed, silently.
 
 ## Releasing binaries
 
