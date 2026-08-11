@@ -2,7 +2,11 @@ use crate::model::{OpenSettings, PickerSnapshot};
 use crate::url_opener::{SystemUrlOpener, UrlOpener};
 use anyhow::{anyhow, bail, Context, Result};
 use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::time::{Duration, Instant};
+
+/// The picker waits for the open command - a handler that never exits would block the overlay.
+const OPEN_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn open_selection(snapshot: &PickerSnapshot, text: &str) -> Result<()> {
     open_selection_with(&SystemUrlOpener, snapshot, text)
@@ -60,13 +64,33 @@ fn run_open_command(
         .write_all(text.as_bytes())
         .context("failed to write the match to the open command")?;
 
-    let status = child
-        .wait()
-        .context("failed to wait for the open command")?;
+    // A timed-out handler is killed without a message - the picker tab is mid-teardown.
+    let Some(status) = wait_with_timeout(&mut child, OPEN_TIMEOUT)? else {
+        return Ok(());
+    };
     if !status.success() {
         bail!("open command {program:?} failed: {status}");
     }
     Ok(())
+}
+
+/// Returns `None` after killing the child on timeout.
+fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<Option<ExitStatus>> {
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .context("failed to wait for the open command")?
+        {
+            return Ok(Some(status));
+        }
+        if started.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(None);
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 #[cfg(test)]
@@ -197,6 +221,17 @@ mod tests {
 
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "found");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn hanging_command_is_killed_and_not_reported() {
+        let mut child = Command::new("sh").args(["-c", "sleep 30"]).spawn().unwrap();
+        let started = Instant::now();
+
+        let status = wait_with_timeout(&mut child, Duration::from_millis(200)).unwrap();
+
+        assert!(status.is_none());
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     #[test]
