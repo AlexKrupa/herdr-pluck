@@ -13,7 +13,8 @@ use crate::herdr::executor::{
     cleanup_session, launch_layout_tab_picker, run_snapshot_picker, zoom_picker,
 };
 use crate::herdr::snapshot::{read_snapshot_file, wait_for_ready, PickerLaunchFiles};
-use crate::model::{OpenSettings, PaneId, PickerAction};
+use crate::model::{OpenSettings, PaneId, PickerAction, PickerOutcome};
+use crate::open_command::open_selection;
 use anyhow::{bail, Context, Result};
 use crossterm::{cursor, execute, terminal};
 use std::io::{stdout, Write};
@@ -102,7 +103,11 @@ impl HerdrAdapter {
                     Ok(())
                 }
             })
-            .and_then(|_| run_snapshot_picker(&snapshot));
+            .and_then(|_| run_snapshot_picker(&snapshot))
+            .and_then(|outcome| match outcome {
+                PickerOutcome::OpenRequested { text } => open_selection(&snapshot, &text),
+                _ => Ok(()),
+            });
         let cleanup = cleanup_session(&mut client, &snapshot.session, &temp_tab);
         let files_cleanup = files.cleanup();
         match primary {

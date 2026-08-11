@@ -4,6 +4,7 @@ pub mod config;
 pub mod herdr;
 pub mod hints;
 pub mod model;
+pub mod open_command;
 pub mod patterns;
 pub mod picker;
 pub mod renderer;
