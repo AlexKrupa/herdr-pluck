@@ -6,6 +6,17 @@ Invoke an action while a pane is focused and type the displayed hint for the ite
 
 ![Herdr Pluck demo](artifacts/pluck-demo-themed.gif)
 
+## Fork
+
+Fork of [rmarganti/herdr-pluck](https://github.com/rmarganti/herdr-pluck). Differences:
+
+- An uppercase hint runs [`[open]` command](#open-action) on the match instead of copying it.
+  One keybinding covers copy and open. We use `shift` because herdr keybindings are global 
+  and would swallow `alt`.
+- The build always compiles from source, because this fork doesn't publish release binaries.
+- Upstream's `open-url` action is still available: lowercase hints unchanged, uppercase hint 
+  has the `[open]` behavior too.
+
 ## Requirements
 
 - Herdr 0.7.4 or newer
@@ -171,6 +182,32 @@ For `trace_id=abc123`, this pattern highlights and copies only `abc123`.
 Lower `priority` values win overlapping matches. If omitted, custom pattern priority defaults to `25`.
 
 When identical text appears more than once, every visible occurrence shows the same hint and copies the same text.
+
+## Open action
+
+Type a hint in lowercase to copy the match. Type it with <kbd>Shift</kbd> to run the open command
+instead. One uppercase character is enough for a two-character hint.
+
+With no command configured, the match goes to the system URL opener - `open` on macOS, `xdg-open`
+on Linux - from Herdr's working directory, so relative paths do not resolve against the source pane.
+To run your own, set it in the plugin config file:
+
+```toml
+[open]
+command = ["bash", "/absolute/path/to/open-handler"]
+```
+
+The command receives the match on stdin, runs with its working directory set to the source pane's
+cwd, and gets `HERDR_PLUCK_PANE_ID` and `HERDR_PLUCK_TAB_ID` in its environment.
+
+It runs before the picker's temporary tab is torn down, and the picker waits for it, so a non-zero
+exit is reported as an error. Two consequences for handlers:
+
+- A handler that creates a pane must name the source pane, as in
+  `herdr pane split --pane "$HERDR_PLUCK_PANE_ID"`. A pane created in the focused tab lands in the
+  temporary picker tab and disappears with it.
+- The picker overlay stays on screen until the command returns, so a handler that blocks blocks the
+  picker.
 
 ## Releasing binaries
 
