@@ -279,6 +279,7 @@ pub struct RenderLine {
 pub enum PickerOutcome {
     Copied { text: String },
     OpenedUrl { url: String },
+    OpenRequested { text: String },
     Cancelled,
     NoMatches,
 }

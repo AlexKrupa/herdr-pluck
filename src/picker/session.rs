@@ -76,6 +76,15 @@ where
                 }
                 return outcome;
             }
+            InputDecision::OpenHint(hint) => {
+                let text = view
+                    .assignments
+                    .copied_text_for_hint(&hint)
+                    .ok_or_else(|| anyhow!("accepted unknown picker hint {hint}"))?;
+                return Ok(PickerOutcome::OpenRequested {
+                    text: text.to_string(),
+                });
+            }
         }
     }
 }
@@ -276,6 +285,32 @@ mod tests {
             .unwrap()
             .contains("failed to open"));
         assert!(clipboard.copied.borrow().is_empty());
+    }
+
+    #[test]
+    fn uppercase_hint_requests_open_without_copying() {
+        let mut input = FakeInput::new(vec![PickerInputEvent::Char('A')]);
+        let clipboard = FakeClipboard::default();
+        let opener = FakeUrlOpener::default();
+        let mut output = Vec::new();
+
+        let outcome = run_picker_with(
+            &snapshot(vec!["open https://example.com/path"], 40, 1),
+            &mut input,
+            &clipboard,
+            &opener,
+            &mut output,
+        )
+        .unwrap();
+
+        assert_eq!(
+            outcome,
+            PickerOutcome::OpenRequested {
+                text: "https://example.com/path".to_string()
+            }
+        );
+        assert!(clipboard.copied.borrow().is_empty());
+        assert!(opener.opened.borrow().is_empty());
     }
 
     #[test]
