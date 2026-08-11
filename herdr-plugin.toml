@@ -6,7 +6,7 @@ description = "Inline keyboard hints for copying visible tokens or opening URLs 
 platforms = ["linux", "macos"]
 
 [[build]]
-command = ["./scripts/install-binary.sh"]
+command = ["sh", "-c", "HERDR_PLUCK_BUILD_FROM_SOURCE=1 ./scripts/install-binary.sh"]
 
 [[actions]]
 id = "pluck"
