@@ -6,6 +6,7 @@ pub(crate) enum InputDecision {
     Continue,
     Cancel,
     CopyHint(String),
+    OpenHint(String),
     InvalidHint,
 }
 
@@ -14,6 +15,7 @@ pub(crate) enum InputDecision {
 pub(crate) struct InputState {
     width: usize,
     buffer: String,
+    open_requested: bool,
 }
 
 impl InputState {
@@ -21,6 +23,7 @@ impl InputState {
         Self {
             width,
             buffer: String::new(),
+            open_requested: false,
         }
     }
 
@@ -33,16 +36,20 @@ impl InputState {
                     return InputDecision::Continue;
                 }
 
-                self.buffer.push(ch);
+                self.open_requested |= ch.is_ascii_uppercase();
+                self.buffer.push(ch.to_ascii_lowercase());
                 if self.buffer.chars().count() < self.width {
                     return InputDecision::Continue;
                 }
 
                 let entered = std::mem::take(&mut self.buffer);
-                if valid_hints.iter().any(|hint| *hint == entered) {
-                    InputDecision::CopyHint(entered)
-                } else {
+                let open = std::mem::take(&mut self.open_requested);
+                if !valid_hints.iter().any(|hint| *hint == entered) {
                     InputDecision::InvalidHint
+                } else if open {
+                    InputDecision::OpenHint(entered)
+                } else {
+                    InputDecision::CopyHint(entered)
                 }
             }
         }
@@ -96,6 +103,52 @@ mod tests {
         assert_eq!(
             state.push(PickerInputEvent::Char('d'), &["sd"]),
             InputDecision::CopyHint("sd".to_string())
+        );
+    }
+
+    #[test]
+    fn uppercase_hint_requests_open() {
+        let mut state = InputState::new(1);
+
+        assert_eq!(
+            state.push(PickerInputEvent::Char('A'), &["a"]),
+            InputDecision::OpenHint("a".to_string())
+        );
+    }
+
+    #[test]
+    fn one_uppercase_char_makes_the_whole_hint_open() {
+        let mut state = InputState::new(2);
+
+        assert_eq!(
+            state.push(PickerInputEvent::Char('a'), &["as"]),
+            InputDecision::Continue
+        );
+        assert_eq!(
+            state.push(PickerInputEvent::Char('S'), &["as"]),
+            InputDecision::OpenHint("as".to_string())
+        );
+    }
+
+    #[test]
+    fn invalid_hint_clears_the_open_flag() {
+        let mut state = InputState::new(2);
+
+        assert_eq!(
+            state.push(PickerInputEvent::Char('A'), &["as"]),
+            InputDecision::Continue
+        );
+        assert_eq!(
+            state.push(PickerInputEvent::Char('x'), &["as"]),
+            InputDecision::InvalidHint
+        );
+        assert_eq!(
+            state.push(PickerInputEvent::Char('a'), &["as"]),
+            InputDecision::Continue
+        );
+        assert_eq!(
+            state.push(PickerInputEvent::Char('s'), &["as"]),
+            InputDecision::CopyHint("as".to_string())
         );
     }
 
