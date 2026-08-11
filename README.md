@@ -53,6 +53,11 @@ By default, linking also installs the prebuilt binary matching `herdr-plugin.tom
 HERDR_PLUCK_BUILD_FROM_SOURCE=1 herdr plugin link .
 ```
 
+> [!NOTE]
+> This fork publishes no release binaries, so `herdr-plugin.toml` sets
+> `HERDR_PLUCK_BUILD_FROM_SOURCE=1` for you. Install and link always compile the checked-out source,
+> and the release-asset download above never runs.
+
 Verify Herdr can see the action:
 
 ```bash
@@ -182,5 +187,9 @@ herdr plugin action list --plugin rmarganti.herdr-pluck
 ```
 
 If no release asset matches the plugin version, make sure Rust/Cargo is available for the local fallback build. Set `HERDR_PLUCK_BUILD_FROM_SOURCE=1` to skip the release download and build the checked-out source explicitly.
+
+> [!NOTE]
+> In this fork the source build is the only path, so Rust/Cargo is a hard requirement, not a
+> fallback.
 
 If copying fails, install one of the supported clipboard tools for your platform and try again.
