@@ -2,8 +2,8 @@ use crate::herdr::client::{HerdrClient, LaunchLayoutNode};
 use crate::herdr::layout::{derive_layout_recreation_plan, derive_source_geometry};
 use crate::herdr::snapshot::{build_source_snapshot, PickerLaunchFiles};
 use crate::model::{
-    LayoutNode, OpenSettings, PaneId, PatternSpec, PickerAction, PickerReturnContext,
-    PickerSnapshot,
+    LayoutNode, OpenSettings, PaneId, PatternSpec, PickerAction, PickerOutcome,
+    PickerReturnContext, PickerSnapshot,
 };
 use crate::viewport::map_visible_viewport;
 use anyhow::{bail, Context, Result};
@@ -194,8 +194,8 @@ pub fn zoom_picker<C: HerdrClient>(
     Ok(())
 }
 
-pub fn run_snapshot_picker(snapshot: &PickerSnapshot) -> Result<()> {
-    crate::picker::run_picker(snapshot).map(|_| ())
+pub fn run_snapshot_picker(snapshot: &PickerSnapshot) -> Result<PickerOutcome> {
+    crate::picker::run_picker(snapshot)
 }
 
 #[cfg(test)]
