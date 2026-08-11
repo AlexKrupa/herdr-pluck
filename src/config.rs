@@ -17,6 +17,15 @@ struct GlobalConfigFile {
     project: ProjectConfig,
     #[serde(default)]
     patterns: Vec<PatternConfigEntry>,
+    #[serde(default)]
+    open: OpenConfigFile,
+}
+
+/// Command run when a match is selected with an uppercase hint.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+struct OpenConfigFile {
+    #[serde(default)]
+    command: Vec<String>,
 }
 
 /// Project-local pattern discovery settings from global config.
@@ -69,6 +78,16 @@ pub fn resolve_pattern_specs(focused_pane_cwd: Option<&Path>) -> Vec<PatternSpec
     }
 }
 
+pub fn resolve_open_command() -> Vec<String> {
+    match load_global_config() {
+        Ok(config) => config.open.command,
+        Err(error) => {
+            eprintln!("Herdr Pluck: failed to load open command: {error:#}");
+            Vec::new()
+        }
+    }
+}
+
 /// Compiles snapshot-provided custom pattern specs, ignoring invalid entries.
 pub fn compile_pattern_specs(specs: &[PatternSpec]) -> Vec<CustomPatternDefinition> {
     specs
@@ -104,10 +123,7 @@ fn try_resolve_pattern_specs(focused_pane_cwd: Option<&Path>) -> Result<Vec<Patt
 
 fn load_global_config() -> Result<GlobalConfigFile> {
     let Some(config_dir) = global_config_dir()? else {
-        return Ok(GlobalConfigFile {
-            project: ProjectConfig::default(),
-            patterns: Vec::new(),
-        });
+        return Ok(GlobalConfigFile::default());
     };
     load_config_file(&config_dir.join(CONFIG_FILE)).map(|config| config.unwrap_or_default())
 }
@@ -204,6 +220,34 @@ regex = "ABC-(?<match>[0-9]+)"
         assert_eq!(specs[0].priority, 25);
         assert!(config.project.patterns);
         assert_eq!(config.project.pattern_files, vec![".herdr-pluck.toml"]);
+    }
+
+    #[test]
+    fn config_file_reads_the_open_command() {
+        let dir = tempfile_dir("config-open-command");
+        let path = dir.join(CONFIG_FILE);
+        std::fs::write(
+            &path,
+            r#"[open]
+command = ["bash", "/tmp/pluck-open"]
+"#,
+        )
+        .unwrap();
+
+        let config = load_config_file(&path).unwrap().unwrap();
+
+        assert_eq!(config.open.command, vec!["bash", "/tmp/pluck-open"]);
+    }
+
+    #[test]
+    fn missing_open_section_yields_no_command() {
+        let dir = tempfile_dir("config-no-open");
+        let path = dir.join(CONFIG_FILE);
+        std::fs::write(&path, "").unwrap();
+
+        let config = load_config_file(&path).unwrap().unwrap();
+
+        assert!(config.open.command.is_empty());
     }
 
     #[test]

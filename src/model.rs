@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PaneId(pub String);
@@ -160,6 +161,17 @@ pub struct PatternSpec {
     pub priority: u16,
 }
 
+/// Settings for the open action triggered by an uppercase hint.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OpenSettings {
+    /// Program and arguments - empty falls back to the system URL opener.
+    #[serde(default)]
+    pub command: Vec<String>,
+    /// Working directory of the source pane.
+    #[serde(default)]
+    pub cwd: Option<PathBuf>,
+}
+
 /// Operation performed when the user selects a hinted match.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PickerAction {
@@ -177,6 +189,8 @@ pub struct PickerSnapshot {
     pub action: PickerAction,
     #[serde(default)]
     pub custom_patterns: Vec<PatternSpec>,
+    #[serde(default)]
+    pub open: OpenSettings,
 }
 
 /// Direction of a Herdr binary pane split as exposed by layout snapshots and replay commands.
