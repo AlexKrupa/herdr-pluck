@@ -6,7 +6,7 @@ use crate::herdr::layout::{
 use crate::herdr::snapshot::{build_source_snapshot, PickerLaunchFiles};
 use crate::model::{
     LayoutNode, OpenSettings, PaneId, PatternSpec, PickerAction, PickerOutcome,
-    PickerReturnContext, PickerSnapshot, SourcePaneGeometry,
+    PickerReturnContext, PickerScope, PickerSnapshot, SourcePaneGeometry,
 };
 use crate::viewport::map_visible_viewport;
 use anyhow::{bail, Context, Result};
@@ -50,6 +50,7 @@ pub fn launch_layout_tab_picker<C: HerdrClient>(
     target: &PaneId,
     binary_path: &Path,
     action: PickerAction,
+    scope: PickerScope,
     custom_patterns: Vec<PatternSpec>,
     open: OpenSettings,
 ) -> Result<()> {
@@ -80,6 +81,7 @@ pub fn launch_layout_tab_picker<C: HerdrClient>(
         action,
         custom_patterns,
     )?;
+    snapshot.scope = scope;
     snapshot.open = open;
 
     let files = PickerLaunchFiles::create(&snapshot)?;
@@ -96,9 +98,10 @@ pub fn launch_layout_tab_picker<C: HerdrClient>(
         .workspace_id
         .as_deref()
         .context("pane layout did not include workspace id")?;
-    let tab_label = match action {
-        PickerAction::Copy => "Herdr Pluck",
-        PickerAction::OpenUrl => "Herdr Pluck: Open URL",
+    let tab_label = match (action, scope) {
+        (PickerAction::Copy, PickerScope::TargetPane) => "Herdr Pluck",
+        (PickerAction::Copy, PickerScope::AllPanes) => "Herdr Pluck: All Panes",
+        (PickerAction::OpenUrl, _) => "Herdr Pluck: Open URL",
     };
     let applied = match client.apply_layout(workspace_id, tab_label, &root) {
         Ok(value) => value,
@@ -401,6 +404,7 @@ mod tests {
                 zoom_picker,
             },
             action: PickerAction::Copy,
+            scope: PickerScope::TargetPane,
             custom_patterns: Vec::new(),
             open: OpenSettings::default(),
         }
@@ -459,6 +463,7 @@ mod tests {
             &PaneId::new("w1:p1"),
             Path::new("/tmp/herdr pluck"),
             PickerAction::Copy,
+            PickerScope::TargetPane,
             Vec::new(),
             OpenSettings::default(),
         )
@@ -496,6 +501,7 @@ mod tests {
             &PaneId::new("w1:p1"),
             Path::new("/tmp/herdr-pluck"),
             PickerAction::Copy,
+            PickerScope::TargetPane,
             Vec::new(),
             OpenSettings::default(),
         )
@@ -616,6 +622,7 @@ mod tests {
             &PaneId::new("w1:p1"),
             Path::new("/tmp/herdr-pluck"),
             PickerAction::Copy,
+            PickerScope::TargetPane,
             Vec::new(),
             OpenSettings::default(),
         )

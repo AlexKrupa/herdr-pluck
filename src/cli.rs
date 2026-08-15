@@ -24,6 +24,13 @@ pub enum Command {
         target_pane: Option<String>,
     },
 
+    /// Action entrypoint: pluck from every pane in the source tab at once.
+    OpenAll {
+        /// Override the pane the picker takes over. Defaults to Herdr invocation context.
+        #[arg(long)]
+        target_pane: Option<String>,
+    },
+
     /// Action entrypoint: open a selected visible URL in the default browser.
     OpenUrl {
         /// Override the pane to pluck from. Defaults to Herdr invocation context.
@@ -67,6 +74,10 @@ pub fn run_with(cli: Cli) -> Result<()> {
         Command::Open { target_pane } => {
             let target = resolve_target(&adapter, target_pane)?;
             adapter.open_copy_picker(&target)?;
+        }
+        Command::OpenAll { target_pane } => {
+            let target = resolve_target(&adapter, target_pane)?;
+            adapter.open_all_panes_picker(&target)?;
         }
         Command::OpenUrl { target_pane } => {
             let target = resolve_target(&adapter, target_pane)?;

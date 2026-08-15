@@ -128,8 +128,8 @@ mod tests {
     use super::*;
     use crate::clipboard::{ClipboardError, CopySuccess};
     use crate::model::{
-        OpenSettings, PaneId, PaneTextCaptureMode, PickerReturnContext, Rect, SourcePaneGeometry,
-        SourcePaneSnapshot,
+        OpenSettings, PaneId, PaneTextCaptureMode, PickerReturnContext, PickerScope, Rect,
+        SourcePaneGeometry, SourcePaneSnapshot,
     };
     use crate::url_opener::{OpenUrlSuccess, UrlOpenError};
     use std::cell::RefCell;
@@ -217,9 +217,45 @@ mod tests {
                 zoom_picker: false,
             },
             action: PickerAction::Copy,
+            scope: PickerScope::TargetPane,
             custom_patterns: Vec::new(),
             open: OpenSettings::default(),
         }
+    }
+
+    #[test]
+    fn all_panes_scope_copies_a_match_from_another_pane() {
+        let mut snapshot = snapshot(vec!["left https://example.com/a"], 40, 1);
+        snapshot.scope = PickerScope::AllPanes;
+        snapshot.source.source_panes.push(SourcePaneGeometry {
+            pane_id: PaneId::new("p2"),
+            outer_rect: Rect::new(40, 0, 40, 1),
+            content_rect: Rect::new(40, 0, 40, 1),
+            content_width: 40,
+            content_height: 1,
+            logical_lines: vec!["right https://example.com/b".to_string()],
+            visible_viewport: None,
+            cwd: None,
+        });
+        let mut input = FakeInput::new(vec![PickerInputEvent::Char('s')]);
+        let clipboard = FakeClipboard::default();
+        let mut output = Vec::new();
+
+        let outcome = run_picker_with(
+            &snapshot,
+            &mut input,
+            &clipboard,
+            &FakeUrlOpener::default(),
+            &mut output,
+        )
+        .unwrap();
+
+        assert_eq!(
+            outcome,
+            PickerOutcome::Copied {
+                text: "https://example.com/b".to_string()
+            }
+        );
     }
 
     #[test]

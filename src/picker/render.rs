@@ -1,18 +1,18 @@
 use crate::config::compile_pattern_specs;
 use crate::hints::{assign_hints, HintAssignments};
 use crate::model::{
-    MatchSpan, PickerAction, PickerSnapshot, RenderLine, RenderSpan, RenderStyle,
-    SourcePaneGeometry,
+    HintAssignment, MatchSpan, PickerAction, PickerScope, PickerSnapshot, RenderLine, RenderSpan,
+    RenderStyle, SourcePaneGeometry,
 };
 use crate::patterns::{find_matches, find_openable_urls};
 use crate::renderer::{render_inline_hints, render_visible_inline_hints};
+use std::collections::HashMap;
 
 /// Rendered picker state and hint assignments derived from a captured pane snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PickerView {
     pub lines: Vec<RenderLine>,
     pub assignments: HintAssignments,
-    pub match_count: usize,
 }
 
 fn find_pane_matches(snapshot: &PickerSnapshot, pane: &SourcePaneGeometry) -> Vec<MatchSpan> {
@@ -47,28 +47,71 @@ pub fn render_pane(pane: &SourcePaneGeometry, assignments: &HintAssignments) -> 
     }
 }
 
-/// Builds the production picker view for the pane the picker took over.
+/// Panes contributing matches, ordered top-to-bottom then left-to-right.
+pub fn panes_in_scope(snapshot: &PickerSnapshot) -> Vec<&SourcePaneGeometry> {
+    let mut panes: Vec<&SourcePaneGeometry> = match snapshot.scope {
+        PickerScope::TargetPane => snapshot.source.target_pane().into_iter().collect(),
+        PickerScope::AllPanes => snapshot.source.source_panes.iter().collect(),
+    };
+    panes.sort_by_key(|pane| (pane.outer_rect.y, pane.outer_rect.x));
+    panes
+}
+
+/// Assigns hints once over every pane in scope, so all picker processes agree.
+pub fn assign_global_hints(snapshot: &PickerSnapshot) -> HintAssignments {
+    let matches = panes_in_scope(snapshot)
+        .into_iter()
+        .flat_map(|pane| find_pane_matches(snapshot, pane))
+        .collect();
+    assign_hints(matches)
+}
+
+/// Narrows a global assignment to one pane's own occurrences, keeping the global hint strings.
+pub fn local_assignments(
+    snapshot: &PickerSnapshot,
+    pane: &SourcePaneGeometry,
+    global: &HintAssignments,
+) -> HintAssignments {
+    let mut by_text: HashMap<String, Vec<MatchSpan>> = HashMap::new();
+    for span in find_pane_matches(snapshot, pane) {
+        by_text.entry(span.text.clone()).or_default().push(span);
+    }
+
+    let assignments = global
+        .assignments()
+        .iter()
+        .filter_map(|assignment| {
+            by_text
+                .remove(&assignment.text)
+                .map(|occurrences| HintAssignment {
+                    hint: assignment.hint.clone(),
+                    text: assignment.text.clone(),
+                    occurrences,
+                })
+        })
+        .collect();
+    HintAssignments::new(assignments)
+}
+
+/// Builds the production picker view: global hints for input, local occurrences for drawing.
 pub fn build_picker_view(snapshot: &PickerSnapshot) -> PickerView {
+    let global = assign_global_hints(snapshot);
     let Some(target) = snapshot.source.target_pane() else {
         return PickerView {
             lines: Vec::new(),
-            assignments: HintAssignments::new(Vec::new()),
-            match_count: 0,
+            assignments: global,
         };
     };
 
-    let matches = find_pane_matches(snapshot, target);
-    let assignments = assign_hints(matches.clone());
-    let lines = if assignments.is_empty() {
+    let lines = if global.is_empty() {
         no_matches_view(snapshot.action, target.content_width, target.content_height)
     } else {
-        render_pane(target, &assignments)
+        render_pane(target, &local_assignments(snapshot, target, &global))
     };
 
     PickerView {
         lines,
-        assignments,
-        match_count: matches.len(),
+        assignments: global,
     }
 }
 
@@ -116,7 +159,8 @@ fn fit_to_width(text: &str, width: usize) -> String {
 mod tests {
     use super::*;
     use crate::model::{
-        OpenSettings, PaneId, PaneTextCaptureMode, PickerReturnContext, Rect, SourcePaneSnapshot,
+        OpenSettings, PaneId, PaneTextCaptureMode, PickerReturnContext, PickerScope, Rect,
+        SourcePaneSnapshot,
     };
 
     fn snapshot(lines: Vec<&str>, width: u16, height: u16) -> PickerSnapshot {
@@ -143,9 +187,84 @@ mod tests {
                 zoom_picker: false,
             },
             action: PickerAction::Copy,
+            scope: PickerScope::TargetPane,
             custom_patterns: Vec::new(),
             open: OpenSettings::default(),
         }
+    }
+
+    fn two_pane_snapshot(scope: PickerScope) -> PickerSnapshot {
+        let mut snapshot = snapshot(vec!["left https://example.com/a"], 40, 1);
+        snapshot.scope = scope;
+        snapshot.source.source_panes[0].outer_rect = Rect::new(0, 0, 40, 1);
+        snapshot.source.source_panes.push(SourcePaneGeometry {
+            pane_id: PaneId::new("p2"),
+            outer_rect: Rect::new(40, 0, 40, 1),
+            content_rect: Rect::new(40, 0, 40, 1),
+            content_width: 40,
+            content_height: 1,
+            logical_lines: vec!["right https://example.com/b".to_string()],
+            visible_viewport: None,
+            cwd: None,
+        });
+        snapshot
+    }
+
+    #[test]
+    fn all_panes_scope_assigns_one_namespace_in_visual_order() {
+        let snapshot = two_pane_snapshot(PickerScope::AllPanes);
+
+        let global = assign_global_hints(&snapshot);
+
+        assert_eq!(global.len(), 2);
+        assert_eq!(
+            global.copied_text_for_hint("a"),
+            Some("https://example.com/a")
+        );
+        assert_eq!(
+            global.copied_text_for_hint("s"),
+            Some("https://example.com/b")
+        );
+    }
+
+    #[test]
+    fn target_scope_ignores_other_panes() {
+        let snapshot = two_pane_snapshot(PickerScope::TargetPane);
+
+        let global = assign_global_hints(&snapshot);
+
+        assert_eq!(global.len(), 1);
+        assert_eq!(
+            global.copied_text_for_hint("a"),
+            Some("https://example.com/a")
+        );
+    }
+
+    #[test]
+    fn duplicate_text_across_panes_shares_one_hint() {
+        let mut snapshot = two_pane_snapshot(PickerScope::AllPanes);
+        snapshot.source.source_panes[1].logical_lines =
+            vec!["right https://example.com/a".to_string()];
+
+        let global = assign_global_hints(&snapshot);
+
+        assert_eq!(global.len(), 1);
+        assert_eq!(global.assignments()[0].occurrences.len(), 2);
+    }
+
+    #[test]
+    fn local_assignments_keep_the_global_hint_and_only_own_occurrences() {
+        let snapshot = two_pane_snapshot(PickerScope::AllPanes);
+        let global = assign_global_hints(&snapshot);
+        let second = &snapshot.source.source_panes[1];
+
+        let local = local_assignments(&snapshot, second, &global);
+
+        assert_eq!(local.len(), 1);
+        assert_eq!(local.assignments()[0].hint, "s");
+        assert_eq!(local.assignments()[0].text, "https://example.com/b");
+        assert_eq!(local.assignments()[0].occurrences.len(), 1);
+        assert_eq!(local.assignments()[0].occurrences[0].line, 0);
     }
 
     #[test]

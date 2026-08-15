@@ -110,6 +110,7 @@ pub fn build_source_snapshot(
         },
         session,
         action,
+        scope: crate::model::PickerScope::default(),
         custom_patterns,
         open: crate::model::OpenSettings::default(),
     })
