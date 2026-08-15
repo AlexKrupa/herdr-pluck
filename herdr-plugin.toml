@@ -19,3 +19,9 @@ id = "open-url"
 title = "Open visible URL"
 contexts = ["pane", "workspace"]
 command = ["./bin/herdr-pluck", "open-url"]
+
+[[actions]]
+id = "pluck-all"
+title = "Pluck visible token from any pane"
+contexts = ["pane", "workspace"]
+command = ["./bin/herdr-pluck", "open-all"]

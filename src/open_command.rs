@@ -97,8 +97,8 @@ fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<Option<Exit
 mod tests {
     use super::*;
     use crate::model::{
-        OpenSettings, PaneId, PaneTextCaptureMode, PickerAction, PickerReturnContext, Rect,
-        SourcePaneGeometry, SourcePaneSnapshot,
+        OpenSettings, PaneId, PaneTextCaptureMode, PickerAction, PickerReturnContext, PickerScope,
+        Rect, SourcePaneGeometry, SourcePaneSnapshot,
     };
     use crate::url_opener::{OpenUrlSuccess, UrlOpenError};
     use std::cell::RefCell;
@@ -142,6 +142,7 @@ mod tests {
                 zoom_picker: false,
             },
             action: PickerAction::Copy,
+            scope: PickerScope::TargetPane,
             custom_patterns: Vec::new(),
             open,
         }

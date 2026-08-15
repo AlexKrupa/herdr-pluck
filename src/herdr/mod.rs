@@ -13,8 +13,7 @@ use crate::herdr::executor::{
     cleanup_session, launch_layout_tab_picker, run_snapshot_picker, zoom_picker,
 };
 use crate::herdr::snapshot::{read_snapshot_file, wait_for_ready, PickerLaunchFiles};
-use crate::hints::HintAssignments;
-use crate::model::{OpenSettings, PaneId, PickerAction, PickerOutcome};
+use crate::model::{OpenSettings, PaneId, PickerAction, PickerOutcome, PickerScope};
 use crate::open_command::open_selection;
 use anyhow::{bail, Context, Result};
 use crossterm::{cursor, execute, terminal};
@@ -42,20 +41,27 @@ impl HerdrAdapter {
     }
 
     /**
-     * Opens the picker that copies any supported visible token.
+     * Opens the picker that copies any supported visible token from the focused pane.
      */
     pub fn open_copy_picker(&self, target: &PaneId) -> Result<()> {
-        self.open_picker(target, PickerAction::Copy)
+        self.open_picker(target, PickerAction::Copy, PickerScope::TargetPane)
+    }
+
+    /**
+     * Opens the picker that copies any supported visible token from every pane in the tab.
+     */
+    pub fn open_all_panes_picker(&self, target: &PaneId) -> Result<()> {
+        self.open_picker(target, PickerAction::Copy, PickerScope::AllPanes)
     }
 
     /**
      * Opens the picker that launches browser-openable visible URLs.
      */
     pub fn open_url_picker(&self, target: &PaneId) -> Result<()> {
-        self.open_picker(target, PickerAction::OpenUrl)
+        self.open_picker(target, PickerAction::OpenUrl, PickerScope::TargetPane)
     }
 
-    fn open_picker(&self, target: &PaneId, action: PickerAction) -> Result<()> {
+    fn open_picker(&self, target: &PaneId, action: PickerAction, scope: PickerScope) -> Result<()> {
         let binary = std::env::current_exe().context("failed to locate herdr-pluck binary")?;
         let cwd = self.context.focused_pane_cwd();
         let patterns = match action {
@@ -67,7 +73,7 @@ impl HerdrAdapter {
             cwd,
         };
         let mut client = SocketHerdrClient::from_context(&self.context)?;
-        launch_layout_tab_picker(&mut client, target, &binary, action, patterns, open)?;
+        launch_layout_tab_picker(&mut client, target, &binary, action, scope, patterns, open)?;
         Ok(())
     }
 
@@ -178,7 +184,11 @@ pub fn run_mirror(snapshot_path: &Path, ready_path: &Path, pane: &PaneId) -> Res
         cursor::MoveTo(0, 0),
         cursor::Hide
     )?;
-    let lines = crate::picker::render_pane(geometry, &HintAssignments::new(Vec::new()));
+    let global = crate::picker::assign_global_hints(&snapshot);
+    let lines = crate::picker::render_pane(
+        geometry,
+        &crate::picker::local_assignments(&snapshot, geometry, &global),
+    );
     crate::renderer::terminal::emit_render_lines(&mut out, &lines)?;
     out.flush()?;
 
