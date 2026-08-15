@@ -13,6 +13,9 @@ Fork of [rmarganti/herdr-pluck](https://github.com/rmarganti/herdr-pluck). Diffe
 - An uppercase hint runs [`[open]` command](#open-action) on the match instead of copying it.
   One keybinding covers copy and open. We use `shift` because herdr keybindings are global 
   and would swallow `alt`.
+- Every pane in the temporary tab shows its own text, instead of only the pane you invoked from.
+- A `pluck-all` action hints matches in every pane of the tab at once. Hints run in reading order
+  across panes. The `[open]` command runs in the directory of the pane the match came from.
 - The build always compiles from source, because this fork doesn't publish release binaries.
 - Upstream's `open-url` action is still available: lowercase hints unchanged, uppercase hint 
   has the `[open]` behavior too.
@@ -79,6 +82,7 @@ The action ids are:
 
 ```text
 rmarganti.herdr-pluck.pluck
+rmarganti.herdr-pluck.pluck-all
 rmarganti.herdr-pluck.open-url
 ```
 
@@ -92,6 +96,16 @@ key = "prefix+q"
 type = "plugin_action"
 command = "rmarganti.herdr-pluck.pluck"
 description = "pluck visible token"
+```
+
+To bind the all-panes action separately:
+
+```toml
+[[keys.command]]
+key = "prefix+Q"
+type = "plugin_action"
+command = "rmarganti.herdr-pluck.pluck-all"
+description = "pluck visible token from any pane"
 ```
 
 To bind the dedicated URL action separately:
@@ -199,6 +213,9 @@ command = ["bash", "/absolute/path/to/open-handler"]
 
 The command receives the match on stdin, runs with its working directory set to the source pane's
 cwd, and gets `HERDR_PLUCK_PANE_ID` and `HERDR_PLUCK_TAB_ID` in its environment.
+
+Under `pluck-all`, one hint covers every occurrence of the same text. If two panes show that text,
+the first pane in reading order supplies the cwd and the pane id.
 
 It runs before the picker's temporary tab is torn down, and the picker waits for it, so a non-zero
 exit is reported as an error. Two consequences for handlers:
