@@ -41,9 +41,19 @@ pub enum Command {
         ready: PathBuf,
     },
 
-    /// Internal shell-free placeholder for non-picker panes.
+    /// Internal entrypoint: render the non-picker panes of the temporary tab.
     #[command(hide = true)]
-    Idle,
+    Mirror {
+        /// Temp JSON snapshot path produced by `open`.
+        #[arg(long)]
+        snapshot: PathBuf,
+        /// Source pane this process mirrors.
+        #[arg(long)]
+        pane: String,
+        /// One-shot launch barrier released after layout application.
+        #[arg(long)]
+        ready: PathBuf,
+    },
 }
 
 pub fn run() -> Result<()> {
@@ -65,7 +75,11 @@ pub fn run_with(cli: Cli) -> Result<()> {
         Command::Pick { snapshot, ready } => {
             adapter.run_picker_from_snapshot(&snapshot, &ready)?;
         }
-        Command::Idle => crate::herdr::run_idle()?,
+        Command::Mirror {
+            snapshot,
+            pane,
+            ready,
+        } => crate::herdr::run_mirror(&snapshot, &ready, &PaneId::new(pane))?,
     }
 
     Ok(())
