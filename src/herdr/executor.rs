@@ -204,7 +204,8 @@ mod tests {
     use crate::herdr::client::AppliedLayout;
     use crate::herdr::layout::{LayoutPane, LayoutSnapshot};
     use crate::model::{
-        PaneTextCaptureMode, Rect, SourcePaneSnapshot, SplitDirection, VisibleViewport,
+        PaneTextCaptureMode, Rect, SourcePaneGeometry, SourcePaneSnapshot, SplitDirection,
+        VisibleViewport,
     };
     use anyhow::anyhow;
 
@@ -309,15 +310,20 @@ mod tests {
                 target_pane_id: PaneId::new("w1:p1"),
                 source_tab_id: "w1:t1".into(),
                 workspace_id: "w1".into(),
-                source_panes: Vec::new(),
-                target_content_width: 80,
-                target_content_height: 24,
-                logical_lines: Vec::new(),
-                visible_viewport: Some(VisibleViewport {
-                    rows: Vec::new(),
+                source_panes: vec![SourcePaneGeometry {
+                    pane_id: PaneId::new("w1:p1"),
+                    outer_rect: Rect::new(0, 0, 80, 24),
+                    content_rect: Rect::new(0, 0, 80, 24),
+                    content_width: 80,
+                    content_height: 24,
                     logical_lines: Vec::new(),
-                    segments: Vec::new(),
-                }),
+                    visible_viewport: Some(VisibleViewport {
+                        rows: Vec::new(),
+                        logical_lines: Vec::new(),
+                        segments: Vec::new(),
+                    }),
+                    cwd: None,
+                }],
                 capture_mode: PaneTextCaptureMode::ExactVisibleUnwrapped,
             },
             session: PickerReturnContext {

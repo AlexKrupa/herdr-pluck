@@ -94,9 +94,13 @@ impl HerdrAdapter {
             .and_then(|_| zoom_picker(&mut client, &snapshot, &pane))
             .and_then(|_| {
                 if snapshot.session.zoom_picker {
+                    let target = snapshot
+                        .source
+                        .target_pane()
+                        .context("picker snapshot is missing its target pane")?;
                     wait_for_terminal_size(
-                        snapshot.source.target_content_width,
-                        snapshot.source.target_content_height,
+                        target.content_width,
+                        target.content_height,
                         Duration::from_secs(2),
                     )
                 } else {
