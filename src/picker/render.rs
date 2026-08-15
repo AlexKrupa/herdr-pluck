@@ -1,7 +1,8 @@
 use crate::config::compile_pattern_specs;
 use crate::hints::{assign_hints, HintAssignments};
 use crate::model::{
-    PickerAction, PickerOutcome, PickerSnapshot, RenderLine, RenderSpan, RenderStyle,
+    MatchSpan, PickerAction, PickerOutcome, PickerSnapshot, RenderLine, RenderSpan, RenderStyle,
+    SourcePaneGeometry,
 };
 use crate::patterns::{find_matches, find_openable_urls};
 use crate::picker::input::CursorGuard;
@@ -31,43 +32,54 @@ pub struct ReadonlyPickerView {
     pub hint_count: usize,
 }
 
-/// Builds the production picker view from captured pane text.
-pub fn build_picker_view(snapshot: &PickerSnapshot) -> PickerView {
-    let logical_lines = snapshot
-        .source
+fn find_pane_matches(snapshot: &PickerSnapshot, pane: &SourcePaneGeometry) -> Vec<MatchSpan> {
+    let logical_lines = pane
         .visible_viewport
         .as_ref()
         .map(|viewport| viewport.logical_lines.as_slice())
-        .unwrap_or(&snapshot.source.logical_lines);
-    let matches = match snapshot.action {
+        .unwrap_or(&pane.logical_lines);
+    match snapshot.action {
         PickerAction::Copy => {
             let custom_patterns = compile_pattern_specs(&snapshot.custom_patterns);
             find_matches(logical_lines, &custom_patterns)
         }
         PickerAction::OpenUrl => find_openable_urls(logical_lines),
-    };
-    let assignments = assign_hints(matches.clone());
+    }
+}
 
-    let lines = if assignments.is_empty() {
-        no_matches_view(
-            snapshot.action,
-            snapshot.source.target_content_width,
-            snapshot.source.target_content_height,
-        )
-    } else if let Some(viewport) = &snapshot.source.visible_viewport {
-        render_visible_inline_hints(
+pub fn render_pane(pane: &SourcePaneGeometry, assignments: &HintAssignments) -> Vec<RenderLine> {
+    match &pane.visible_viewport {
+        Some(viewport) => render_visible_inline_hints(
             viewport,
-            &assignments,
-            snapshot.source.target_content_width,
-            snapshot.source.target_content_height,
-        )
+            assignments,
+            pane.content_width,
+            pane.content_height,
+        ),
+        None => render_inline_hints(
+            &pane.logical_lines,
+            assignments,
+            pane.content_width,
+            pane.content_height,
+        ),
+    }
+}
+
+/// Builds the production picker view for the pane the picker took over.
+pub fn build_picker_view(snapshot: &PickerSnapshot) -> PickerView {
+    let Some(target) = snapshot.source.target_pane() else {
+        return PickerView {
+            lines: Vec::new(),
+            assignments: HintAssignments::new(Vec::new()),
+            match_count: 0,
+        };
+    };
+
+    let matches = find_pane_matches(snapshot, target);
+    let assignments = assign_hints(matches.clone());
+    let lines = if assignments.is_empty() {
+        no_matches_view(snapshot.action, target.content_width, target.content_height)
     } else {
-        render_inline_hints(
-            &snapshot.source.logical_lines,
-            &assignments,
-            snapshot.source.target_content_width,
-            snapshot.source.target_content_height,
-        )
+        render_pane(target, &assignments)
     };
 
     PickerView {
@@ -168,7 +180,7 @@ fn fit_to_width(text: &str, width: usize) -> String {
 mod tests {
     use super::*;
     use crate::model::{
-        OpenSettings, PaneId, PaneTextCaptureMode, PickerReturnContext, SourcePaneSnapshot,
+        OpenSettings, PaneId, PaneTextCaptureMode, PickerReturnContext, Rect, SourcePaneSnapshot,
     };
 
     fn snapshot(lines: Vec<&str>, width: u16, height: u16) -> PickerSnapshot {
@@ -177,11 +189,16 @@ mod tests {
                 target_pane_id: PaneId::new("p1"),
                 source_tab_id: "t1".to_string(),
                 workspace_id: "w1".to_string(),
-                source_panes: Vec::new(),
-                target_content_width: width,
-                target_content_height: height,
-                logical_lines: lines.into_iter().map(str::to_string).collect(),
-                visible_viewport: None,
+                source_panes: vec![SourcePaneGeometry {
+                    pane_id: PaneId::new("p1"),
+                    outer_rect: Rect::new(0, 0, width, height),
+                    content_rect: Rect::new(0, 0, width, height),
+                    content_width: width,
+                    content_height: height,
+                    logical_lines: lines.into_iter().map(str::to_string).collect(),
+                    visible_viewport: None,
+                    cwd: None,
+                }],
                 capture_mode: PaneTextCaptureMode::RecentUnwrappedBottomApproximation,
             },
             session: PickerReturnContext {

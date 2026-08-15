@@ -61,19 +61,35 @@ pub fn derive_source_pane_geometries(layout: &LayoutSnapshot) -> Vec<SourcePaneG
         .panes
         .iter()
         .map(|pane| {
-            let content_rect = pane
-                .rect
+            // Herdr reports the unzoomed rect for a zoomed pane, but its PTY fills the tab area.
+            let outer_rect = if layout.zoomed && pane_is_focused(layout, pane) {
+                layout.area
+            } else {
+                pane.rect
+            };
+            let content_rect = outer_rect
                 .inset(border_inset)
-                .reserve_right_gutter(u16::from(pane.rect.inset(border_inset).width > 1));
+                .reserve_right_gutter(u16::from(outer_rect.inset(border_inset).width > 1));
             SourcePaneGeometry {
                 pane_id: PaneId::new(pane.pane_id.clone()),
-                outer_rect: pane.rect,
+                outer_rect,
                 content_rect,
                 content_width: content_rect.width,
                 content_height: content_rect.height,
+                logical_lines: Vec::new(),
+                visible_viewport: None,
+                cwd: None,
             }
         })
         .collect()
+}
+
+fn pane_is_focused(layout: &LayoutSnapshot, pane: &LayoutPane) -> bool {
+    pane.focused
+        || layout
+            .focused_pane_id
+            .as_ref()
+            .is_some_and(|id| id == &pane.pane_id)
 }
 
 /// Derives legacy source-pane content geometry from Herdr-global pre-overlay layout coordinates.
@@ -347,6 +363,32 @@ mod tests {
         let layout = layout(vec![pane("p1", Rect::new(0, 0, 100, 40), true)], vec![]);
         let error = derive_layout_recreation_plan(&layout, &PaneId::new("missing")).unwrap_err();
         assert!(error.to_string().contains("target pane missing"));
+    }
+
+    #[test]
+    fn zoomed_focused_pane_gets_the_full_tab_area() {
+        let mut layout = layout(
+            vec![
+                pane("p1", Rect::new(0, 0, 50, 40), true),
+                pane("p2", Rect::new(50, 0, 50, 40), false),
+            ],
+            vec![LayoutSplit {
+                direction: SplitDirection::Right,
+                ratio: 0.5,
+                rect: Rect::new(0, 0, 100, 40),
+            }],
+        );
+        layout.zoomed = true;
+
+        let geometries = derive_source_pane_geometries(&layout);
+        let zoomed = &geometries[0];
+
+        assert_eq!(
+            zoomed.content_rect,
+            derive_source_geometry(&layout, &PaneId::new("p1")).source_content_rect
+        );
+        assert_eq!(zoomed.content_width, 97);
+        assert_eq!(zoomed.content_height, 38);
     }
 
     #[test]

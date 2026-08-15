@@ -102,7 +102,7 @@ pub enum PaneTextCaptureMode {
     VisibleWrapped,
 }
 
-/// One source pane's Herdr-global geometry captured before creating a temporary layout tab.
+/// One source pane's geometry and captured visible text, taken before the picker tab exists.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourcePaneGeometry {
     pub pane_id: PaneId,
@@ -110,6 +110,10 @@ pub struct SourcePaneGeometry {
     pub content_rect: Rect,
     pub content_width: u16,
     pub content_height: u16,
+    pub logical_lines: Vec<String>,
+    pub visible_viewport: Option<VisibleViewport>,
+    /// Foreground working directory, used as the open command's cwd.
+    pub cwd: Option<PathBuf>,
 }
 
 /// Immutable source tab state needed to launch and render a layout-tab picker.
@@ -119,11 +123,16 @@ pub struct SourcePaneSnapshot {
     pub source_tab_id: String,
     pub workspace_id: String,
     pub source_panes: Vec<SourcePaneGeometry>,
-    pub target_content_width: u16,
-    pub target_content_height: u16,
-    pub logical_lines: Vec<String>,
-    pub visible_viewport: Option<VisibleViewport>,
     pub capture_mode: PaneTextCaptureMode,
+}
+
+impl SourcePaneSnapshot {
+    /// Geometry and captured text of the pane the picker took over.
+    pub fn target_pane(&self) -> Option<&SourcePaneGeometry> {
+        self.source_panes
+            .iter()
+            .find(|pane| pane.pane_id == self.target_pane_id)
+    }
 }
 
 /// Exact visible pane rows plus the logical lines reconstructed from soft wraps.
@@ -296,4 +305,42 @@ pub enum PickerOutcome {
     OpenRequested { text: String },
     Cancelled,
     NoMatches,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn geometry(pane_id: &str) -> SourcePaneGeometry {
+        SourcePaneGeometry {
+            pane_id: PaneId::new(pane_id),
+            outer_rect: Rect::new(0, 0, 10, 4),
+            content_rect: Rect::new(0, 0, 10, 4),
+            content_width: 10,
+            content_height: 4,
+            logical_lines: vec![format!("line in {pane_id}")],
+            visible_viewport: None,
+            cwd: None,
+        }
+    }
+
+    #[test]
+    fn target_pane_resolves_the_entry_matching_target_pane_id() {
+        let snapshot = SourcePaneSnapshot {
+            target_pane_id: PaneId::new("p2"),
+            source_tab_id: "t1".to_string(),
+            workspace_id: "w1".to_string(),
+            source_panes: vec![geometry("p1"), geometry("p2")],
+            capture_mode: PaneTextCaptureMode::ExactVisibleUnwrapped,
+        };
+
+        let target = snapshot.target_pane().expect("target pane present");
+
+        assert_eq!(target.pane_id, PaneId::new("p2"));
+        assert_eq!(target.logical_lines, vec!["line in p2".to_string()]);
+        assert!(snapshot
+            .source_panes
+            .iter()
+            .any(|pane| pane.pane_id == PaneId::new("p1")));
+    }
 }
