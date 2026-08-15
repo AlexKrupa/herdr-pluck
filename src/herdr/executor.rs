@@ -18,7 +18,17 @@ pub fn capture_panes<C: HerdrClient>(
     layout: &LayoutSnapshot,
 ) -> Result<Vec<SourcePaneGeometry>> {
     let mut panes = derive_source_pane_geometries(layout);
+    let infos = match layout.workspace_id.as_deref() {
+        Some(workspace_id) => client.pane_list(workspace_id)?,
+        None => Vec::new(),
+    };
+
     for pane in &mut panes {
+        pane.cwd = infos
+            .iter()
+            .find(|info| info.pane_id == pane.pane_id.0)
+            .and_then(|info| info.foreground_cwd.clone().or_else(|| info.cwd.clone()));
+
         if pane.content_height == 0 {
             continue;
         }
@@ -242,9 +252,15 @@ mod tests {
         launch_paths: Option<(std::path::PathBuf, std::path::PathBuf)>,
         fail_focus_pane: bool,
         fail_focus_tab: bool,
+        pane_infos: Vec<crate::herdr::client::PaneInfo>,
     }
 
     impl HerdrClient for FakeClient {
+        fn pane_list(&mut self, workspace_id: &str) -> Result<Vec<crate::herdr::client::PaneInfo>> {
+            self.calls.push(format!("pane_list:{workspace_id}"));
+            Ok(self.pane_infos.clone())
+        }
+
         fn pane_layout(&mut self, _pane: &PaneId) -> Result<LayoutSnapshot> {
             self.calls.push("pane_layout".into());
             self.layout.take().context("missing fake layout")
@@ -452,6 +468,7 @@ mod tests {
             client.calls,
             [
                 "pane_layout",
+                "pane_list:w1",
                 "pane_read:w1:p1:24",
                 "apply:w1",
                 "focus_pane:w1:p2"
@@ -512,6 +529,34 @@ mod tests {
             ready_path: ready,
         };
         files.cleanup().unwrap();
+    }
+
+    #[test]
+    fn capture_prefers_foreground_cwd_and_falls_back_to_cwd() {
+        use crate::herdr::client::PaneInfo;
+
+        let mut client = FakeClient {
+            layout: Some(two_pane_layout()),
+            pane_infos: vec![
+                PaneInfo {
+                    pane_id: "w1:p1".into(),
+                    cwd: Some("/repo".into()),
+                    foreground_cwd: Some("/repo/sub".into()),
+                },
+                PaneInfo {
+                    pane_id: "w1:p2".into(),
+                    cwd: Some("/other".into()),
+                    foreground_cwd: None,
+                },
+            ],
+            ..FakeClient::default()
+        };
+        let layout = client.layout.clone().unwrap();
+
+        let panes = capture_panes(&mut client, &layout).unwrap();
+
+        assert_eq!(panes[0].cwd, Some(std::path::PathBuf::from("/repo/sub")));
+        assert_eq!(panes[1].cwd, Some(std::path::PathBuf::from("/other")));
     }
 
     #[test]

@@ -5,6 +5,7 @@ use crate::herdr::socket::UnixSocketTransport;
 use crate::model::PaneId;
 use anyhow::{Context, Result};
 use serde::Serialize;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -34,11 +35,20 @@ pub struct AppliedLayout {
     pub picker_pane_id: PaneId,
 }
 
+/// A pane's identity and working directories, as reported by `pane.list`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaneInfo {
+    pub pane_id: String,
+    pub cwd: Option<PathBuf>,
+    pub foreground_cwd: Option<PathBuf>,
+}
+
 /**
  * Domain seam for all Herdr operations used by picker orchestration.
  */
 pub trait HerdrClient {
     fn pane_layout(&mut self, pane: &PaneId) -> Result<LayoutSnapshot>;
+    fn pane_list(&mut self, workspace_id: &str) -> Result<Vec<PaneInfo>>;
     fn pane_read_visible(&mut self, pane: &PaneId, lines: u16) -> Result<String>;
     fn apply_layout(
         &mut self,
@@ -88,6 +98,11 @@ impl HerdrClient for SocketHerdrClient {
     fn pane_layout(&mut self, pane: &PaneId) -> Result<LayoutSnapshot> {
         let (id, value) = self.call("pane.layout", protocol::pane_target(&pane.0))?;
         protocol::pane_layout(value, &id)
+    }
+
+    fn pane_list(&mut self, workspace_id: &str) -> Result<Vec<PaneInfo>> {
+        let (id, value) = self.call("pane.list", protocol::workspace_target(workspace_id))?;
+        protocol::pane_list(value, &id)
     }
 
     fn pane_read_visible(&mut self, pane: &PaneId, lines: u16) -> Result<String> {

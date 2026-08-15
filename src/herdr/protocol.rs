@@ -4,6 +4,7 @@ use crate::model::SplitDirection;
 use anyhow::{bail, Context, Result};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
+use std::path::PathBuf;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Request<'a, P> {
@@ -20,6 +21,11 @@ pub(crate) struct PaneTarget<'a> {
 #[derive(Debug, Serialize)]
 pub(crate) struct TabTarget<'a> {
     tab_id: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct WorkspaceTarget<'a> {
+    workspace_id: &'a str,
 }
 
 #[derive(Debug, Serialize)]
@@ -121,6 +127,21 @@ enum PaneInfoResult {
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+enum PaneListResult {
+    PaneList { panes: Vec<PaneInfoBody> },
+}
+
+#[derive(Debug, Deserialize)]
+struct PaneInfoBody {
+    pane_id: String,
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    foreground_cwd: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 enum PaneZoomResult {
     PaneZoom {},
 }
@@ -143,6 +164,10 @@ pub(crate) fn request<P>(id: String, method: &str, params: P) -> Request<'_, P> 
 
 pub(crate) fn pane_target(pane_id: &str) -> PaneTarget<'_> {
     PaneTarget { pane_id }
+}
+
+pub(crate) fn workspace_target(workspace_id: &str) -> WorkspaceTarget<'_> {
+    WorkspaceTarget { workspace_id }
 }
 
 pub(crate) fn tab_target(tab_id: &str) -> TabTarget<'_> {
@@ -188,6 +213,19 @@ pub(crate) fn pane_layout(value: Value, id: &str) -> Result<LayoutSnapshot> {
 pub(crate) fn pane_read(value: Value, id: &str) -> Result<String> {
     match decode::<PaneReadResult>(value, id)? {
         PaneReadResult::PaneRead { read } => Ok(read.text),
+    }
+}
+
+pub(crate) fn pane_list(value: Value, id: &str) -> Result<Vec<crate::herdr::client::PaneInfo>> {
+    match decode::<PaneListResult>(value, id)? {
+        PaneListResult::PaneList { panes } => Ok(panes
+            .into_iter()
+            .map(|body| crate::herdr::client::PaneInfo {
+                pane_id: body.pane_id,
+                cwd: body.cwd.map(PathBuf::from),
+                foreground_cwd: body.foreground_cwd.map(PathBuf::from),
+            })
+            .collect()),
     }
 }
 
