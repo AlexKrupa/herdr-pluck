@@ -189,6 +189,14 @@ pub enum PickerAction {
     OpenUrl,
 }
 
+/// Which panes contribute matches to a picker session.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PickerScope {
+    #[default]
+    TargetPane,
+    AllPanes,
+}
+
 /// Full picker launch payload passed from the action process to picker mode.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PickerSnapshot {
@@ -196,6 +204,8 @@ pub struct PickerSnapshot {
     pub session: PickerReturnContext,
     #[serde(default)]
     pub action: PickerAction,
+    #[serde(default)]
+    pub scope: PickerScope,
     #[serde(default)]
     pub custom_patterns: Vec<PatternSpec>,
     #[serde(default)]
