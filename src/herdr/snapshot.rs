@@ -1,4 +1,4 @@
-use crate::herdr::layout::{derive_source_geometry, derive_source_pane_geometries, LayoutSnapshot};
+use crate::herdr::layout::{derive_source_pane_geometries, LayoutSnapshot};
 use crate::model::{
     PaneId, PaneTextCaptureMode, PatternSpec, PickerAction, PickerReturnContext, PickerSnapshot,
     SourcePaneSnapshot, VisibleViewport,
@@ -97,21 +97,19 @@ pub fn build_source_snapshot(
         .workspace_id
         .clone()
         .context("pane layout did not include workspace id")?;
-    let source_panes = derive_source_pane_geometries(layout);
-    let geometry = derive_source_geometry(layout, target);
-    if !source_panes.iter().any(|pane| pane.pane_id == *target) {
+    let mut source_panes = derive_source_pane_geometries(layout);
+    let Some(target_entry) = source_panes.iter_mut().find(|pane| pane.pane_id == *target) else {
         bail!("target pane geometry missing from source layout");
-    }
+    };
+    target_entry.logical_lines = logical_lines;
+    target_entry.visible_viewport = visible_viewport;
+
     Ok(PickerSnapshot {
         source: SourcePaneSnapshot {
             target_pane_id: target.clone(),
             source_tab_id,
             workspace_id,
             source_panes,
-            target_content_width: geometry.source_content_rect.width,
-            target_content_height: geometry.source_content_rect.height,
-            logical_lines,
-            visible_viewport,
             capture_mode: PaneTextCaptureMode::ExactVisibleUnwrapped,
         },
         session,

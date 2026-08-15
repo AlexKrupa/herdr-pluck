@@ -97,8 +97,8 @@ fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<Option<Exit
 mod tests {
     use super::*;
     use crate::model::{
-        OpenSettings, PaneId, PaneTextCaptureMode, PickerAction, PickerReturnContext,
-        SourcePaneSnapshot,
+        OpenSettings, PaneId, PaneTextCaptureMode, PickerAction, PickerReturnContext, Rect,
+        SourcePaneGeometry, SourcePaneSnapshot,
     };
     use crate::url_opener::{OpenUrlSuccess, UrlOpenError};
     use std::cell::RefCell;
@@ -124,11 +124,16 @@ mod tests {
                 target_pane_id: PaneId::new("w1:p1"),
                 source_tab_id: "w1:t1".to_string(),
                 workspace_id: "w1".to_string(),
-                source_panes: Vec::new(),
-                target_content_width: 40,
-                target_content_height: 1,
-                logical_lines: Vec::new(),
-                visible_viewport: None,
+                source_panes: vec![SourcePaneGeometry {
+                    pane_id: PaneId::new("w1:p1"),
+                    outer_rect: Rect::new(0, 0, 40, 1),
+                    content_rect: Rect::new(0, 0, 40, 1),
+                    content_width: 40,
+                    content_height: 1,
+                    logical_lines: Vec::new(),
+                    visible_viewport: None,
+                    cwd: None,
+                }],
                 capture_mode: PaneTextCaptureMode::ExactVisibleUnwrapped,
             },
             session: PickerReturnContext {
