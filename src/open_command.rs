@@ -24,12 +24,18 @@ fn open_selection_with(
             .with_context(|| format!("failed to open selected match {text:?}"));
     }
 
-    run_open_command(
-        &snapshot.open,
-        text,
-        &snapshot.source.target_pane_id.0,
-        &snapshot.session.return_tab_id,
-    )
+    let matched = crate::picker::pane_for_text(snapshot, text);
+    let settings = OpenSettings {
+        command: snapshot.open.command.clone(),
+        cwd: matched
+            .and_then(|pane| pane.cwd.clone())
+            .or_else(|| snapshot.open.cwd.clone()),
+    };
+    let pane_id = matched
+        .map(|pane| pane.pane_id.0.clone())
+        .unwrap_or_else(|| snapshot.source.target_pane_id.0.clone());
+
+    run_open_command(&settings, text, &pane_id, &snapshot.session.return_tab_id)
 }
 
 /// Spawns the configured command with the match on stdin and the source pane in the environment.
@@ -152,6 +158,86 @@ mod tests {
         let path = std::env::temp_dir().join(format!("pluck-open-{name}-{}", std::process::id()));
         let _ = std::fs::remove_file(&path);
         path
+    }
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("pluck-open-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn open_runs_in_the_matched_pane_directory() {
+        let out = out_path("matched-cwd");
+        let left = temp_dir("left");
+        let right = temp_dir("right");
+        let mut snapshot = snapshot(OpenSettings {
+            command: vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                format!("pwd > {}", out.display()),
+            ],
+            cwd: Some(temp_dir("fallback")),
+        });
+        snapshot.scope = PickerScope::AllPanes;
+        snapshot.source.source_panes[0].logical_lines =
+            vec!["left https://example.com/a".to_string()];
+        snapshot.source.source_panes[0].cwd = Some(left.clone());
+        snapshot.source.source_panes.push(SourcePaneGeometry {
+            pane_id: PaneId::new("p2"),
+            outer_rect: Rect::new(40, 0, 40, 1),
+            content_rect: Rect::new(40, 0, 40, 1),
+            content_width: 40,
+            content_height: 1,
+            logical_lines: vec!["right https://example.com/b".to_string()],
+            visible_viewport: None,
+            cwd: Some(right.clone()),
+        });
+
+        open_selection_with(
+            &FakeUrlOpener::default(),
+            &snapshot,
+            "https://example.com/b",
+        )
+        .unwrap();
+
+        let recorded = std::fs::read_to_string(&out).unwrap();
+        assert_eq!(
+            recorded.trim(),
+            right.canonicalize().unwrap().to_str().unwrap()
+        );
+        assert_ne!(
+            recorded.trim(),
+            left.canonicalize().unwrap().to_str().unwrap()
+        );
+    }
+
+    #[test]
+    fn open_falls_back_to_the_configured_cwd_when_no_pane_matches() {
+        let out = out_path("fallback-cwd");
+        let fallback = temp_dir("fallback-only");
+        let mut snapshot = snapshot(OpenSettings {
+            command: vec![
+                "sh".to_string(),
+                "-c".to_string(),
+                format!("pwd > {}", out.display()),
+            ],
+            cwd: Some(fallback.clone()),
+        });
+        snapshot.source.source_panes[0].cwd = Some(temp_dir("ignored"));
+
+        open_selection_with(
+            &FakeUrlOpener::default(),
+            &snapshot,
+            "https://example.com/absent",
+        )
+        .unwrap();
+
+        let recorded = std::fs::read_to_string(&out).unwrap();
+        assert_eq!(
+            recorded.trim(),
+            fallback.canonicalize().unwrap().to_str().unwrap()
+        );
     }
 
     #[test]

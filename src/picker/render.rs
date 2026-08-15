@@ -57,6 +57,18 @@ pub fn panes_in_scope(snapshot: &PickerSnapshot) -> Vec<&SourcePaneGeometry> {
     panes
 }
 
+/// The first pane in scope order whose matches include this text.
+pub fn pane_for_text<'a>(
+    snapshot: &'a PickerSnapshot,
+    text: &str,
+) -> Option<&'a SourcePaneGeometry> {
+    panes_in_scope(snapshot).into_iter().find(|pane| {
+        find_pane_matches(snapshot, pane)
+            .iter()
+            .any(|span| span.text == text)
+    })
+}
+
 /// Assigns hints once over every pane in scope, so all picker processes agree.
 pub fn assign_global_hints(snapshot: &PickerSnapshot) -> HintAssignments {
     let matches = panes_in_scope(snapshot)
