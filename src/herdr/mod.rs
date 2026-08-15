@@ -13,6 +13,7 @@ use crate::herdr::executor::{
     cleanup_session, launch_layout_tab_picker, run_snapshot_picker, zoom_picker,
 };
 use crate::herdr::snapshot::{read_snapshot_file, wait_for_ready, PickerLaunchFiles};
+use crate::hints::HintAssignments;
 use crate::model::{OpenSettings, PaneId, PickerAction, PickerOutcome};
 use crate::open_command::open_selection;
 use anyhow::{bail, Context, Result};
@@ -157,15 +158,30 @@ fn wait_for_terminal_size(width: u16, height: u16, timeout: Duration) -> Result<
     }
 }
 
-/// Clears an inert pane and remains alive until Herdr closes its tab.
-pub fn run_idle() -> Result<()> {
+/// Renders one non-picker pane's captured text and stays alive until Herdr closes its tab.
+pub fn run_mirror(snapshot_path: &Path, ready_path: &Path, pane: &PaneId) -> Result<()> {
+    let snapshot = read_snapshot_file(snapshot_path)?;
+    let geometry = snapshot
+        .source
+        .source_panes
+        .iter()
+        .find(|entry| entry.pane_id == *pane)
+        .with_context(|| format!("mirror pane {pane} is missing from the picker snapshot"))?;
+
+    // Ignore a timed-out barrier: a stale-sized mirror is better than a blank pane.
+    let _ = wait_for_ready(ready_path, Duration::from_secs(10));
+
     let mut out = stdout();
     execute!(
         out,
         terminal::Clear(terminal::ClearType::All),
-        cursor::MoveTo(0, 0)
+        cursor::MoveTo(0, 0),
+        cursor::Hide
     )?;
+    let lines = crate::picker::render_pane(geometry, &HintAssignments::new(Vec::new()));
+    crate::renderer::terminal::emit_render_lines(&mut out, &lines)?;
     out.flush()?;
+
     loop {
         std::thread::sleep(Duration::from_secs(3600));
     }

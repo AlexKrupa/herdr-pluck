@@ -1,7 +1,7 @@
-use crate::herdr::layout::{derive_source_pane_geometries, LayoutSnapshot};
+use crate::herdr::layout::LayoutSnapshot;
 use crate::model::{
     PaneId, PaneTextCaptureMode, PatternSpec, PickerAction, PickerReturnContext, PickerSnapshot,
-    SourcePaneSnapshot, VisibleViewport,
+    SourcePaneGeometry, SourcePaneSnapshot,
 };
 use anyhow::{bail, Context, Result};
 use std::fs;
@@ -83,8 +83,7 @@ pub fn wait_for_ready(path: &Path, timeout: Duration) -> Result<()> {
 pub fn build_source_snapshot(
     layout: &LayoutSnapshot,
     target: &PaneId,
-    logical_lines: Vec<String>,
-    visible_viewport: Option<VisibleViewport>,
+    source_panes: Vec<SourcePaneGeometry>,
     session: PickerReturnContext,
     action: PickerAction,
     custom_patterns: Vec<PatternSpec>,
@@ -97,12 +96,9 @@ pub fn build_source_snapshot(
         .workspace_id
         .clone()
         .context("pane layout did not include workspace id")?;
-    let mut source_panes = derive_source_pane_geometries(layout);
-    let Some(target_entry) = source_panes.iter_mut().find(|pane| pane.pane_id == *target) else {
+    if !source_panes.iter().any(|pane| pane.pane_id == *target) {
         bail!("target pane geometry missing from source layout");
-    };
-    target_entry.logical_lines = logical_lines;
-    target_entry.visible_viewport = visible_viewport;
+    }
 
     Ok(PickerSnapshot {
         source: SourcePaneSnapshot {

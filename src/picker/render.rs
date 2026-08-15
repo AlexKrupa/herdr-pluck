@@ -1,13 +1,11 @@
 use crate::config::compile_pattern_specs;
 use crate::hints::{assign_hints, HintAssignments};
 use crate::model::{
-    MatchSpan, PickerAction, PickerOutcome, PickerSnapshot, RenderLine, RenderSpan, RenderStyle,
+    MatchSpan, PickerAction, PickerSnapshot, RenderLine, RenderSpan, RenderStyle,
     SourcePaneGeometry,
 };
 use crate::patterns::{find_matches, find_openable_urls};
-use crate::picker::input::CursorGuard;
-use crate::renderer::{render_inline_hints, render_visible_inline_hints, terminal};
-use anyhow::{Context, Result};
+use crate::renderer::{render_inline_hints, render_visible_inline_hints};
 
 /// Rendered picker state and hint assignments derived from a captured pane snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,21 +13,6 @@ pub struct PickerView {
     pub lines: Vec<RenderLine>,
     pub assignments: HintAssignments,
     pub match_count: usize,
-}
-
-impl PickerView {
-    /// Number of unique copied texts that can be selected by hint input.
-    pub fn hint_count(&self) -> usize {
-        self.assignments.len()
-    }
-}
-
-/// Rendered, readonly picker state derived from a captured pane snapshot.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReadonlyPickerView {
-    pub lines: Vec<RenderLine>,
-    pub match_count: usize,
-    pub hint_count: usize,
 }
 
 fn find_pane_matches(snapshot: &PickerSnapshot, pane: &SourcePaneGeometry) -> Vec<MatchSpan> {
@@ -86,53 +69,6 @@ pub fn build_picker_view(snapshot: &PickerSnapshot) -> PickerView {
         lines,
         assignments,
         match_count: matches.len(),
-    }
-}
-
-/// Builds the production readonly picker view from captured pane text.
-pub fn build_readonly_picker_view(snapshot: &PickerSnapshot) -> ReadonlyPickerView {
-    let view = build_picker_view(snapshot);
-    let hint_count = view.hint_count();
-    ReadonlyPickerView {
-        lines: view.lines,
-        match_count: view.match_count,
-        hint_count,
-    }
-}
-
-/// Runs the readonly picker renderer and waits for an explicit close key.
-pub fn run_readonly_picker(snapshot: &PickerSnapshot) -> Result<PickerOutcome> {
-    use crossterm::event::{read, Event, KeyCode};
-    use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-    use std::io::{self, Write};
-
-    struct RawModeGuard;
-    impl Drop for RawModeGuard {
-        fn drop(&mut self) {
-            let _ = disable_raw_mode();
-        }
-    }
-
-    let view = build_readonly_picker_view(snapshot);
-    let mut stdout = io::stdout();
-    let _cursor = CursorGuard::hide()?;
-    terminal::emit_render_lines(&mut stdout, &view.lines)?;
-    stdout.flush()?;
-
-    enable_raw_mode().context("failed to enable raw mode for readonly picker")?;
-    let _guard = RawModeGuard;
-    loop {
-        match read()? {
-            Event::Key(key) if key.code != KeyCode::Enter => break,
-            Event::Key(_) => continue,
-            _ => continue,
-        }
-    }
-
-    if view.hint_count == 0 {
-        Ok(PickerOutcome::NoMatches)
-    } else {
-        Ok(PickerOutcome::Cancelled)
     }
 }
 
@@ -213,12 +149,10 @@ mod tests {
     }
 
     #[test]
-    fn readonly_view_renders_inline_hints_for_matches() {
-        let view =
-            build_readonly_picker_view(&snapshot(vec!["open https://example.com/path"], 40, 1));
+    fn picker_view_renders_inline_hints_for_matches() {
+        let view = build_picker_view(&snapshot(vec!["open https://example.com/path"], 40, 1));
 
-        assert_eq!(view.match_count, 1);
-        assert_eq!(view.hint_count, 1);
+        assert_eq!(view.assignments.len(), 1);
         assert_eq!(view.lines.len(), 1);
         assert!(view.lines[0]
             .spans
@@ -233,7 +167,7 @@ mod tests {
 
         let view = build_picker_view(&snapshot);
 
-        assert_eq!(view.hint_count(), 1);
+        assert_eq!(view.assignments.len(), 1);
         assert_eq!(
             view.assignments.copied_text_for_hint("a"),
             Some("https://example.com")
@@ -251,11 +185,10 @@ mod tests {
     }
 
     #[test]
-    fn readonly_view_reports_no_matches_with_full_size_message() {
-        let view = build_readonly_picker_view(&snapshot(vec!["plain text only"], 20, 3));
+    fn picker_view_reports_no_matches_with_full_size_message() {
+        let view = build_picker_view(&snapshot(vec!["plain text only"], 20, 3));
 
-        assert_eq!(view.match_count, 0);
-        assert_eq!(view.hint_count, 0);
+        assert_eq!(view.assignments.len(), 0);
         assert_eq!(view.lines.len(), 3);
         assert_eq!(view.lines[0].spans[0].text.len(), 20);
         assert!(view.lines[0].spans[0].text.starts_with("Herdr Pluck"));

@@ -1,13 +1,38 @@
 use crate::herdr::client::{HerdrClient, LaunchLayoutNode};
-use crate::herdr::layout::{derive_layout_recreation_plan, derive_source_geometry};
+use crate::herdr::layout::{
+    derive_layout_recreation_plan, derive_source_geometry, derive_source_pane_geometries,
+    LayoutSnapshot,
+};
 use crate::herdr::snapshot::{build_source_snapshot, PickerLaunchFiles};
 use crate::model::{
     LayoutNode, OpenSettings, PaneId, PatternSpec, PickerAction, PickerOutcome,
-    PickerReturnContext, PickerSnapshot,
+    PickerReturnContext, PickerSnapshot, SourcePaneGeometry,
 };
 use crate::viewport::map_visible_viewport;
 use anyhow::{bail, Context, Result};
 use std::path::Path;
+
+/// Captures every source pane: its working directory and its unwrapped visible text.
+pub fn capture_panes<C: HerdrClient>(
+    client: &mut C,
+    layout: &LayoutSnapshot,
+) -> Result<Vec<SourcePaneGeometry>> {
+    let mut panes = derive_source_pane_geometries(layout);
+    for pane in &mut panes {
+        if pane.content_height == 0 {
+            continue;
+        }
+        let text = client.pane_read_visible(&pane.pane_id, pane.content_height)?;
+        let viewport = map_visible_viewport(
+            text.lines().map(str::to_string).collect(),
+            pane.content_width,
+            pane.content_height,
+        );
+        pane.logical_lines = viewport.logical_lines.clone();
+        pane.visible_viewport = Some(viewport);
+    }
+    Ok(panes)
+}
 
 /// Captures source state and atomically applies the temporary picker layout.
 pub fn launch_layout_tab_picker<C: HerdrClient>(
@@ -21,19 +46,12 @@ pub fn launch_layout_tab_picker<C: HerdrClient>(
     let layout = client.pane_layout(target)?;
     let plan = derive_layout_recreation_plan(&layout, target)?;
     let geometry = derive_source_geometry(&layout, target);
-    let read_lines = geometry.source_content_rect.height;
 
-    if read_lines == 0 {
+    if geometry.source_content_rect.height == 0 {
         bail!("target pane {target} has zero visible content height");
     }
 
-    let visible_text = client.pane_read_visible(target, read_lines)?;
-
-    let viewport = map_visible_viewport(
-        visible_text.lines().map(str::to_string).collect(),
-        geometry.source_content_rect.width,
-        read_lines,
-    );
+    let source_panes = capture_panes(client, &layout)?;
 
     let return_context = PickerReturnContext {
         return_tab_id: layout
@@ -47,8 +65,7 @@ pub fn launch_layout_tab_picker<C: HerdrClient>(
     let mut snapshot = build_source_snapshot(
         &layout,
         target,
-        viewport.logical_lines.clone(),
-        Some(viewport),
+        source_panes,
         return_context.clone(),
         action,
         custom_patterns,
@@ -118,8 +135,17 @@ fn convert_layout(
                 ],
             }
         }
-        LayoutNode::Pane { .. } => LaunchLayoutNode::Pane {
-            command: vec![binary.to_string_lossy().into_owned(), "idle".into()],
+        LayoutNode::Pane { source_pane_id, .. } => LaunchLayoutNode::Pane {
+            command: vec![
+                binary.to_string_lossy().into_owned(),
+                "mirror".into(),
+                "--snapshot".into(),
+                snapshot.to_string_lossy().into_owned(),
+                "--pane".into(),
+                source_pane_id.0.clone(),
+                "--ready".into(),
+                ready.to_string_lossy().into_owned(),
+            ],
         },
         LayoutNode::Split {
             direction,
@@ -202,7 +228,7 @@ pub fn run_snapshot_picker(snapshot: &PickerSnapshot) -> Result<PickerOutcome> {
 mod tests {
     use super::*;
     use crate::herdr::client::AppliedLayout;
-    use crate::herdr::layout::{LayoutPane, LayoutSnapshot};
+    use crate::herdr::layout::{LayoutPane, LayoutSnapshot, LayoutSplit};
     use crate::model::{
         PaneTextCaptureMode, Rect, SourcePaneGeometry, SourcePaneSnapshot, SplitDirection,
         VisibleViewport,
@@ -224,9 +250,9 @@ mod tests {
             self.layout.take().context("missing fake layout")
         }
 
-        fn pane_read_visible(&mut self, _pane: &PaneId, lines: u16) -> Result<String> {
-            self.calls.push(format!("pane_read:{lines}"));
-            Ok("https://example.com".into())
+        fn pane_read_visible(&mut self, pane: &PaneId, lines: u16) -> Result<String> {
+            self.calls.push(format!("pane_read:{pane}:{lines}"));
+            Ok(format!("https://example.com/{pane}"))
         }
 
         fn apply_layout(
@@ -304,6 +330,33 @@ mod tests {
         }
     }
 
+    fn two_pane_layout() -> LayoutSnapshot {
+        LayoutSnapshot {
+            area: Rect::new(0, 0, 80, 24),
+            focused_pane_id: Some("w1:p1".into()),
+            panes: vec![
+                LayoutPane {
+                    focused: true,
+                    pane_id: "w1:p1".into(),
+                    rect: Rect::new(0, 0, 40, 24),
+                },
+                LayoutPane {
+                    focused: false,
+                    pane_id: "w1:p2".into(),
+                    rect: Rect::new(40, 0, 40, 24),
+                },
+            ],
+            splits: vec![LayoutSplit {
+                direction: SplitDirection::Right,
+                ratio: 0.5,
+                rect: Rect::new(0, 0, 80, 24),
+            }],
+            tab_id: Some("w1:t1".into()),
+            workspace_id: Some("w1".into()),
+            zoomed: false,
+        }
+    }
+
     fn picker_snapshot(zoom_picker: bool) -> PickerSnapshot {
         PickerSnapshot {
             source: SourcePaneSnapshot {
@@ -362,19 +415,14 @@ mod tests {
         let LaunchLayoutNode::Split {
             direction,
             ratio,
-            first,
             second,
+            ..
         } = converted
         else {
             panic!("expected split layout");
         };
         assert_eq!(direction, SplitDirection::Right);
         assert_eq!(ratio, 0.37);
-        assert!(matches!(
-            first.as_ref(),
-            LaunchLayoutNode::Pane { command }
-                if command == &vec!["/a b/π'".to_string(), "idle".to_string()]
-        ));
         assert!(matches!(
             second.as_ref(),
             LaunchLayoutNode::Pane { command }
@@ -404,7 +452,7 @@ mod tests {
             client.calls,
             [
                 "pane_layout",
-                "pane_read:24",
+                "pane_read:w1:p1:24",
                 "apply:w1",
                 "focus_pane:w1:p2"
             ]
@@ -417,6 +465,96 @@ mod tests {
             ready_path: ready,
         };
         files.cleanup().unwrap();
+    }
+
+    #[test]
+    fn every_pane_is_captured_and_non_target_panes_mirror() {
+        let mut client = FakeClient {
+            layout: Some(two_pane_layout()),
+            ..FakeClient::default()
+        };
+
+        launch_layout_tab_picker(
+            &mut client,
+            &PaneId::new("w1:p1"),
+            Path::new("/tmp/herdr-pluck"),
+            PickerAction::Copy,
+            Vec::new(),
+            OpenSettings::default(),
+        )
+        .unwrap();
+
+        assert!(client
+            .calls
+            .iter()
+            .any(|call| call.starts_with("pane_read:w1:p1:")));
+        assert!(client
+            .calls
+            .iter()
+            .any(|call| call.starts_with("pane_read:w1:p2:")));
+
+        let (snapshot_path, ready) = client.launch_paths.clone().unwrap();
+        let snapshot = crate::herdr::snapshot::read_snapshot_file(&snapshot_path).unwrap();
+        let mirrored = snapshot
+            .source
+            .source_panes
+            .iter()
+            .find(|pane| pane.pane_id == PaneId::new("w1:p2"))
+            .expect("second pane captured");
+        assert!(mirrored
+            .logical_lines
+            .iter()
+            .any(|line| line.contains("w1:p2")));
+
+        let files = PickerLaunchFiles {
+            snapshot_path,
+            marker_temp_path: ready.with_extension("ready.tmp"),
+            ready_path: ready,
+        };
+        files.cleanup().unwrap();
+    }
+
+    #[test]
+    fn conversion_gives_non_target_panes_a_mirror_command() {
+        let tree = LayoutNode::Split {
+            direction: SplitDirection::Right,
+            ratio: 0.5,
+            first: Box::new(LayoutNode::Pane {
+                source_pane_id: PaneId::new("a"),
+                rect: Rect::new(0, 0, 1, 1),
+            }),
+            second: Box::new(LayoutNode::Pane {
+                source_pane_id: PaneId::new("b"),
+                rect: Rect::new(0, 0, 1, 1),
+            }),
+            rect: Rect::new(0, 0, 2, 1),
+        };
+
+        let converted = convert_layout(
+            &tree,
+            &PaneId::new("b"),
+            Path::new("/bin/pluck"),
+            Path::new("/s"),
+            Path::new("/r"),
+        );
+
+        let LaunchLayoutNode::Split { first, .. } = converted else {
+            panic!("expected split layout");
+        };
+        assert!(matches!(
+            first.as_ref(),
+            LaunchLayoutNode::Pane { command }
+                if command == &vec![
+                    "/bin/pluck".to_string(),
+                    "mirror".to_string(),
+                    "--snapshot".to_string(),
+                    "/s".to_string(),
+                    "--pane".to_string(),
+                    "a".to_string(),
+                    "--ready".to_string(),
+                    "/r".to_string(),
+                ]
+        ));
     }
 
     #[test]
