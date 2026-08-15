@@ -5,7 +5,7 @@ pub mod render;
 mod session;
 
 pub use render::{
-    assign_global_hints, build_picker_view, local_assignments, panes_in_scope, render_pane,
-    PickerView,
+    assign_global_hints, build_picker_view, local_assignments, pane_for_text, panes_in_scope,
+    render_pane, PickerView,
 };
 pub use session::run_picker;
