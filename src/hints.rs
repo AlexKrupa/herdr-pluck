@@ -94,12 +94,10 @@ pub fn display_width(text: &str) -> usize {
     UnicodeWidthStr::width(text)
 }
 
-/// Assigns fixed-width hints to copied texts in the caller-provided first-visible order.
+/// Assigns fixed-width hints to unique copied texts, in caller order.
 ///
-/// The caller is responsible for sorting matches top-to-bottom and left-to-right. Duplicate copied
-/// text shares the first assigned hint while retaining every visible occurrence. New unique copied
-/// texts beyond the v1 capacity are silently omitted, but later duplicates of already-assigned
-/// copied texts are still retained.
+/// Repeats of a text share its first hint and keep every occurrence. Unique texts past
+/// `MAX_HINT_CAPACITY` get no hint.
 pub fn assign_hints(matches: Vec<MatchSpan>) -> HintAssignments {
     if matches.is_empty() {
         return HintAssignments::new(Vec::new());
