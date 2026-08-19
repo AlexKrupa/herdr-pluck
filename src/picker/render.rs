@@ -1,12 +1,12 @@
 use crate::config::compile_pattern_specs;
-use crate::hints::{assign_hints, HintAssignments};
+use crate::hints::{assign_hints, HintAssignments, MAX_HINT_CAPACITY};
 use crate::model::{
     HintAssignment, MatchSpan, PickerAction, PickerScope, PickerSnapshot, RenderLine, RenderSpan,
     RenderStyle, SourcePaneGeometry,
 };
 use crate::patterns::{find_matches, find_openable_urls};
 use crate::renderer::{render_inline_hints, render_visible_inline_hints};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Rendered picker state and hint assignments derived from a captured pane snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,11 +71,30 @@ pub fn pane_for_text<'a>(
 
 /// Assigns hints once over every pane in scope, so all picker processes agree.
 pub fn assign_global_hints(snapshot: &PickerSnapshot) -> HintAssignments {
-    let matches = panes_in_scope(snapshot)
+    let per_pane = panes_in_scope(snapshot)
         .into_iter()
-        .flat_map(|pane| find_pane_matches(snapshot, pane))
+        .map(|pane| find_pane_matches(snapshot, pane))
         .collect();
-    assign_hints(matches)
+    assign_hints(fair_visual_order(per_pane))
+}
+
+/// Drops the matches past the hint capacity round-robin, so one pane cannot claim it all.
+fn fair_visual_order(per_pane: Vec<Vec<MatchSpan>>) -> Vec<MatchSpan> {
+    let longest = per_pane.iter().map(Vec::len).max().unwrap_or(0);
+    let mut kept: HashSet<String> = HashSet::new();
+    for index in 0..longest {
+        for span in per_pane.iter().filter_map(|pane| pane.get(index)) {
+            if kept.len() < MAX_HINT_CAPACITY {
+                kept.insert(span.text.clone());
+            }
+        }
+    }
+
+    per_pane
+        .into_iter()
+        .flatten()
+        .filter(|span| kept.contains(&span.text))
+        .collect()
 }
 
 /// Narrows a global assignment to one pane's own occurrences, keeping the global hint strings.
@@ -240,6 +259,22 @@ mod tests {
     }
 
     #[test]
+    fn hints_follow_pane_reading_order() {
+        let mut snapshot = two_pane_snapshot(PickerScope::AllPanes);
+        snapshot.source.source_panes[0].logical_lines = vec!["/a/1 /a/2".to_string()];
+        snapshot.source.source_panes[1].logical_lines = vec!["/b/1 /b/2".to_string()];
+
+        let global = assign_global_hints(&snapshot);
+
+        let order: Vec<&str> = global
+            .assignments()
+            .iter()
+            .map(|assignment| assignment.text.as_str())
+            .collect();
+        assert_eq!(order, vec!["/a/1", "/a/2", "/b/1", "/b/2"]);
+    }
+
+    #[test]
     fn target_scope_ignores_other_panes() {
         let snapshot = two_pane_snapshot(PickerScope::TargetPane);
 
@@ -250,6 +285,21 @@ mod tests {
             global.copied_text_for_hint("a"),
             Some("https://example.com/a")
         );
+    }
+
+    #[test]
+    fn busy_pane_leaves_hints_for_the_other_pane() {
+        let mut snapshot = two_pane_snapshot(PickerScope::AllPanes);
+        snapshot.source.source_panes[0].logical_lines = (0..MAX_HINT_CAPACITY)
+            .map(|index| format!("/busy/{index}"))
+            .collect();
+
+        let global = assign_global_hints(&snapshot);
+
+        assert!(global
+            .assignments()
+            .iter()
+            .any(|assignment| assignment.text == "https://example.com/b"));
     }
 
     #[test]

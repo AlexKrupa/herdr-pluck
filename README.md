@@ -15,7 +15,8 @@ Fork of [rmarganti/herdr-pluck](https://github.com/rmarganti/herdr-pluck). Diffe
   and would swallow `alt`.
 - Every pane in the temporary tab shows its own text, instead of only the pane you invoked from.
 - A `pluck-all` action hints matches in every pane of the tab at once. Hints run in reading order
-  across panes. The `[open]` command runs in the directory of the pane the match came from.
+  across panes. Above the hint capacity, the panes drop matches in turn, so one pane cannot use it
+  all. The `[open]` command runs in the directory of the pane the match came from.
 - The build always compiles from source, because this fork doesn't publish release binaries.
 - Upstream's `open-url` action is still available: lowercase hints unchanged, uppercase hint 
   has the `[open]` behavior too.
