@@ -1,6 +1,5 @@
 use crate::model::{
-    LayoutNode, LayoutRecreationPlan, PaneId, Rect, SourceGeometrySnapshot, SourcePaneGeometry,
-    SplitDirection,
+    LayoutNode, LayoutRecreationPlan, PaneId, Rect, SourcePaneGeometry, SplitDirection,
 };
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
@@ -67,9 +66,7 @@ pub fn derive_source_pane_geometries(layout: &LayoutSnapshot) -> Vec<SourcePaneG
             } else {
                 pane.rect
             };
-            let content_rect = outer_rect
-                .inset(border_inset)
-                .reserve_right_gutter(u16::from(outer_rect.inset(border_inset).width > 1));
+            let content_rect = content_rect(outer_rect, border_inset);
             SourcePaneGeometry {
                 pane_id: PaneId::new(pane.pane_id.clone()),
                 outer_rect,
@@ -84,48 +81,18 @@ pub fn derive_source_pane_geometries(layout: &LayoutSnapshot) -> Vec<SourcePaneG
         .collect()
 }
 
+/// Pane terminal area inside the borders and left of the scrollbar gutter.
+pub fn content_rect(outer_rect: Rect, border_inset: u16) -> Rect {
+    let inner = outer_rect.inset(border_inset);
+    inner.reserve_right_gutter(u16::from(inner.width > 1))
+}
+
 fn pane_is_focused(layout: &LayoutSnapshot, pane: &LayoutPane) -> bool {
     pane.focused
         || layout
             .focused_pane_id
             .as_ref()
             .is_some_and(|id| id == &pane.pane_id)
-}
-
-/// Derives legacy source-pane content geometry from Herdr-global pre-overlay layout coordinates.
-pub fn derive_source_geometry(layout: &LayoutSnapshot, target: &PaneId) -> SourceGeometrySnapshot {
-    let pane_count = layout.panes.len();
-    let target_pane = layout
-        .panes
-        .iter()
-        .find(|pane| pane.pane_id == target.0)
-        .or_else(|| layout.panes.iter().find(|pane| pane.focused));
-    let target_focused = target_pane
-        .map(|pane| pane.focused)
-        .or_else(|| layout.focused_pane_id.as_ref().map(|id| id == &target.0))
-        .unwrap_or(false);
-
-    let use_full_area = layout.zoomed && target_focused;
-    let source_outer_rect = if use_full_area {
-        layout.area
-    } else {
-        target_pane.map(|pane| pane.rect).unwrap_or(layout.area)
-    };
-
-    let border_inset = u16::from(pane_count > 1);
-    let source_content_rect = source_outer_rect
-        .inset(border_inset)
-        .reserve_right_gutter(u16::from(source_outer_rect.inset(border_inset).width > 1));
-
-    SourceGeometrySnapshot {
-        target_pane_id: target.clone(),
-        terminal_area: layout.area,
-        source_outer_rect,
-        source_content_rect,
-        pane_count,
-        zoomed: layout.zoomed,
-        target_focused,
-    }
 }
 
 fn build_layout_node(
@@ -383,10 +350,7 @@ mod tests {
         let geometries = derive_source_pane_geometries(&layout);
         let zoomed = &geometries[0];
 
-        assert_eq!(
-            zoomed.content_rect,
-            derive_source_geometry(&layout, &PaneId::new("p1")).source_content_rect
-        );
+        assert_eq!(zoomed.content_rect, Rect::new(1, 1, 97, 38));
         assert_eq!(zoomed.content_width, 97);
         assert_eq!(zoomed.content_height, 38);
     }

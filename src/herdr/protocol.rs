@@ -138,6 +138,13 @@ struct PaneInfoBody {
     cwd: Option<String>,
     #[serde(default)]
     foreground_cwd: Option<String>,
+    #[serde(default)]
+    scroll: Option<PaneScrollBody>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PaneScrollBody {
+    viewport_rows: u16,
 }
 
 #[derive(Debug, Deserialize)]
@@ -224,6 +231,7 @@ pub(crate) fn pane_list(value: Value, id: &str) -> Result<Vec<crate::herdr::clie
                 pane_id: body.pane_id,
                 cwd: body.cwd.map(PathBuf::from),
                 foreground_cwd: body.foreground_cwd.map(PathBuf::from),
+                viewport_rows: body.scroll.map(|scroll| scroll.viewport_rows),
             })
             .collect()),
     }
@@ -367,5 +375,19 @@ mod tests {
         )
         .unwrap();
         assert_eq!(applied, ("w:t2".into(), "w:p2".into()));
+    }
+
+    #[test]
+    fn pane_list_reads_viewport_rows_when_present() {
+        let panes = pane_list(
+            json!({"id":"x","result":{"type":"pane_list","panes":[
+                {"pane_id":"w:p1","scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":61}},
+                {"pane_id":"w:p2"}
+            ]}}),
+            "x",
+        )
+        .unwrap();
+        assert_eq!(panes[0].viewport_rows, Some(61));
+        assert_eq!(panes[1].viewport_rows, None);
     }
 }

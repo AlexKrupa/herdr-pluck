@@ -35,12 +35,14 @@ pub struct AppliedLayout {
     pub picker_pane_id: PaneId,
 }
 
-/// A pane's identity and working directories, as reported by `pane.list`.
+/// Pane details that `pane.list` reports.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaneInfo {
     pub pane_id: String,
     pub cwd: Option<PathBuf>,
     pub foreground_cwd: Option<PathBuf>,
+    /// Terminal row count, without the pane borders.
+    pub viewport_rows: Option<u16>,
 }
 
 /**
