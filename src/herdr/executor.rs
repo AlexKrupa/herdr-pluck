@@ -1,7 +1,6 @@
 use crate::herdr::client::{HerdrClient, LaunchLayoutNode};
 use crate::herdr::layout::{
-    derive_layout_recreation_plan, derive_source_geometry, derive_source_pane_geometries,
-    LayoutSnapshot,
+    content_rect, derive_layout_recreation_plan, derive_source_pane_geometries, LayoutSnapshot,
 };
 use crate::herdr::snapshot::{build_source_snapshot, PickerLaunchFiles};
 use crate::model::{
@@ -12,7 +11,7 @@ use crate::viewport::map_visible_viewport;
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 
-/// Captures every source pane: its working directory and its unwrapped visible text.
+/// Captures each source pane: its working directory, content size, and unwrapped visible text.
 pub fn capture_panes<C: HerdrClient>(
     client: &mut C,
     layout: &LayoutSnapshot,
@@ -24,10 +23,16 @@ pub fn capture_panes<C: HerdrClient>(
     };
 
     for pane in &mut panes {
-        pane.cwd = infos
-            .iter()
-            .find(|info| info.pane_id == pane.pane_id.0)
-            .and_then(|info| info.foreground_cwd.clone().or_else(|| info.cwd.clone()));
+        let info = infos.iter().find(|info| info.pane_id == pane.pane_id.0);
+        pane.cwd = info.and_then(|info| info.foreground_cwd.clone().or_else(|| info.cwd.clone()));
+
+        // Herdr draws borders on all sides, so half the row difference is the inset on each side.
+        if let Some(viewport_rows) = info.and_then(|info| info.viewport_rows) {
+            let border_inset = pane.outer_rect.height.saturating_sub(viewport_rows) / 2;
+            pane.content_rect = content_rect(pane.outer_rect, border_inset);
+            pane.content_width = pane.content_rect.width;
+            pane.content_height = pane.content_rect.height;
+        }
 
         if pane.content_height == 0 {
             continue;
@@ -56,13 +61,14 @@ pub fn launch_layout_tab_picker<C: HerdrClient>(
 ) -> Result<()> {
     let layout = client.pane_layout(target)?;
     let plan = derive_layout_recreation_plan(&layout, target)?;
-    let geometry = derive_source_geometry(&layout, target);
+    let source_panes = capture_panes(client, &layout)?;
 
-    if geometry.source_content_rect.height == 0 {
+    if source_panes
+        .iter()
+        .any(|pane| pane.pane_id == *target && pane.content_height == 0)
+    {
         bail!("target pane {target} has zero visible content height");
     }
-
-    let source_panes = capture_panes(client, &layout)?;
 
     let return_context = PickerReturnContext {
         return_tab_id: layout
@@ -548,11 +554,13 @@ mod tests {
                     pane_id: "w1:p1".into(),
                     cwd: Some("/repo".into()),
                     foreground_cwd: Some("/repo/sub".into()),
+                    viewport_rows: None,
                 },
                 PaneInfo {
                     pane_id: "w1:p2".into(),
                     cwd: Some("/other".into()),
                     foreground_cwd: None,
+                    viewport_rows: None,
                 },
             ],
             ..FakeClient::default()
@@ -563,6 +571,78 @@ mod tests {
 
         assert_eq!(panes[0].cwd, Some(std::path::PathBuf::from("/repo/sub")));
         assert_eq!(panes[1].cwd, Some(std::path::PathBuf::from("/other")));
+    }
+
+    #[test]
+    fn capture_insets_borders_of_a_single_pane_from_viewport_rows() {
+        let mut client = FakeClient {
+            layout: Some(source_layout(false)),
+            pane_infos: vec![crate::herdr::client::PaneInfo {
+                pane_id: "w1:p1".into(),
+                cwd: None,
+                foreground_cwd: None,
+                viewport_rows: Some(22),
+            }],
+            ..FakeClient::default()
+        };
+        let layout = client.layout.clone().unwrap();
+
+        let panes = capture_panes(&mut client, &layout).unwrap();
+
+        assert_eq!(panes[0].content_rect, Rect::new(1, 1, 77, 22));
+        assert_eq!((panes[0].content_width, panes[0].content_height), (77, 22));
+        assert!(client.calls.contains(&"pane_read:w1:p1:22".into()));
+    }
+
+    #[test]
+    fn launch_rejects_target_with_only_borders() {
+        let mut layout = source_layout(false);
+        layout.panes[0].rect = Rect::new(0, 0, 80, 2);
+        let mut client = FakeClient {
+            layout: Some(layout),
+            pane_infos: vec![crate::herdr::client::PaneInfo {
+                pane_id: "w1:p1".into(),
+                cwd: None,
+                foreground_cwd: None,
+                viewport_rows: Some(0),
+            }],
+            ..FakeClient::default()
+        };
+
+        let error = launch_layout_tab_picker(
+            &mut client,
+            &PaneId::new("w1:p1"),
+            Path::new("/tmp/herdr-pluck"),
+            PickerAction::Copy,
+            PickerScope::TargetPane,
+            Vec::new(),
+            OpenSettings::default(),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("zero visible content height"));
+        assert!(!client.calls.iter().any(|call| call.starts_with("apply:")));
+    }
+
+    #[test]
+    fn capture_keeps_full_rect_of_borderless_split_panes() {
+        let mut client = FakeClient {
+            layout: Some(two_pane_layout()),
+            pane_infos: ["w1:p1", "w1:p2"]
+                .map(|pane_id| crate::herdr::client::PaneInfo {
+                    pane_id: pane_id.into(),
+                    cwd: None,
+                    foreground_cwd: None,
+                    viewport_rows: Some(24),
+                })
+                .to_vec(),
+            ..FakeClient::default()
+        };
+        let layout = client.layout.clone().unwrap();
+
+        let panes = capture_panes(&mut client, &layout).unwrap();
+
+        assert_eq!(panes[1].content_rect, Rect::new(40, 0, 39, 24));
     }
 
     #[test]

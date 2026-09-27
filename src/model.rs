@@ -70,30 +70,6 @@ impl Rect {
     }
 }
 
-/// Frozen pre-overlay source-pane geometry derived from Herdr-global layout coordinates.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SourceGeometrySnapshot {
-    pub target_pane_id: PaneId,
-    pub terminal_area: Rect,
-    pub source_outer_rect: Rect,
-    pub source_content_rect: Rect,
-    pub pane_count: usize,
-    pub zoomed: bool,
-    pub target_focused: bool,
-}
-
-impl SourceGeometrySnapshot {
-    /// Source content rect relative to Herdr's terminal area, excluding sidebar/tab-bar offsets.
-    pub fn source_content_rect_in_terminal(&self) -> Rect {
-        self.source_content_rect.relative_to(self.terminal_area)
-    }
-
-    /// Source outer rect relative to Herdr's terminal area, excluding sidebar/tab-bar offsets.
-    pub fn source_outer_rect_in_terminal(&self) -> Rect {
-        self.source_outer_rect.relative_to(self.terminal_area)
-    }
-}
-
 /// How pane text was captured for a picker snapshot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PaneTextCaptureMode {
