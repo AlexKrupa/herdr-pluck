@@ -83,7 +83,8 @@ jobs:
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          # Each matrix job appends generated notes, so only one may generate them.
+          generate_release_notes: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
           files: |
             herdr-pluck-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
             herdr-pluck-${{ github.ref_name }}-${{ matrix.target }}.tar.gz.sha256
