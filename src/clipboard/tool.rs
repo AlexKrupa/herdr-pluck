@@ -11,7 +11,7 @@ const PBCOPY: ClipboardTool = ClipboardTool {
 };
 const WL_COPY: ClipboardTool = ClipboardTool {
     name: "wl-copy",
-    args: &[],
+    args: &["--type", "text/plain;charset=utf-8"],
 };
 const XCLIP: ClipboardTool = ClipboardTool {
     name: "xclip",

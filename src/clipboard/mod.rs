@@ -120,7 +120,14 @@ mod tests {
             copy_with_runner("token", &runner, env(ClipboardOs::Other, true, true)).unwrap();
 
         assert_eq!(success.tool, "wl-copy");
-        assert_eq!(runner.runs.borrow()[0].0, "wl-copy");
+        assert_eq!(
+            runner.runs.borrow().as_slice(),
+            &[(
+                "wl-copy",
+                vec!["--type", "text/plain;charset=utf-8"],
+                "token".to_string()
+            )]
+        );
     }
 
     #[test]
