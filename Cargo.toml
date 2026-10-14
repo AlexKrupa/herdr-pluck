@@ -1,6 +1,6 @@
 [package]
 name = "herdr-pluck"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 description = "Herdr plugin for tmux-fingers-style visible terminal plucking"
 license = "MIT"
