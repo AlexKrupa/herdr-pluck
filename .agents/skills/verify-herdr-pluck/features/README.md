@@ -28,8 +28,8 @@ A proof of a change is the new behavior **plus** the existing journeys that shar
 | Custom pattern loading or discovery (`src/config.rs`) | All of [custom-patterns](./custom-patterns.md) |
 | Hint assignment (`src/hints.rs`) | "Duplicates share a hint" and "Two-letter hints" from [pluck-copy](./pluck-copy.md) |
 | Rendering (`src/renderer*`, `src/viewport.rs`, `src/picker/render.rs`) | "Hint every built-in", "Two-letter hints", the [open-url](./open-url.md) empty state, and "Siblings are blank" from [split-layouts](./split-layouts.md) |
-| Key handling or picker lifecycle (`src/picker/session.rs`) | "Copy", "Two-letter hints", and "Cancel" from [pluck-copy](./pluck-copy.md), plus the [open-url](./open-url.md) empty state |
-| Herdr integration: layout, launch, cleanup, focus (`src/herdr/*`) | All of [split-layouts](./split-layouts.md), plus "Copy" and "Cancel" from [pluck-copy](./pluck-copy.md) |
+| Key handling or picker lifecycle (`src/picker/session.rs`) | "Copy", "Two-letter hints", and "Cancel" from [pluck-copy](./pluck-copy.md), the [open-url](./open-url.md) empty state, and all of [jump](./jump.md) |
+| Herdr integration: layout, launch, cleanup, focus (`src/herdr/*`) | All of [split-layouts](./split-layouts.md), "Copy" and "Cancel" from [pluck-copy](./pluck-copy.md), and all of [jump](./jump.md) |
 | Clipboard (`src/clipboard/*`) | "Copy" and "Cancel" from [pluck-copy](./pluck-copy.md) |
 | URL opening (`src/url_opener/*`) | All of [open-url](./open-url.md) |
 | Build or packaging (`scripts/install-binary.sh`, `herdr-plugin.toml`, `Cargo.toml`) | `$V up` with the build, then "Copy" from [pluck-copy](./pluck-copy.md) |
@@ -65,3 +65,4 @@ Keep implementation details out unless they explain a gotcha.
 - [Open a visible URL](./open-url.md) covers URL-only hinting, launching `http(s)://` and `file://` URLs, the clipboard staying untouched, and the empty state.
 - [Custom patterns](./custom-patterns.md) covers global and project-local patterns, `match` captures, and priority over built-ins.
 - [Split layouts](./split-layouts.md) covers mirroring the source layout, hinting only the target pane, and returning focus to the source pane.
+- [Jump to a Herdr pane or tab](./jump.md) covers uppercase hints on Herdr pane and tab ids.

@@ -116,10 +116,14 @@ impl HerdrAdapter {
             })
             .and_then(|_| run_snapshot_picker(&snapshot))
             .and_then(|outcome| match outcome {
-                PickerOutcome::OpenRequested { text } => open_selection(&snapshot, &text),
-                _ => Ok(()),
+                PickerOutcome::OpenRequested { text } => {
+                    open_selection(&snapshot, &text).map(|()| None)
+                }
+                PickerOutcome::JumpRequested { target } => Ok(Some(target)),
+                _ => Ok(None),
             });
-        let cleanup = cleanup_session(&mut client, &snapshot.session, &temp_tab);
+        let jump_target = primary.as_ref().ok().and_then(Option::as_ref);
+        let cleanup = cleanup_session(&mut client, &snapshot.session, &temp_tab, jump_target);
         let files_cleanup = files.cleanup();
         match primary {
             Err(e) => {
@@ -131,7 +135,7 @@ impl HerdrAdapter {
                 }
                 Err(e)
             }
-            Ok(()) => {
+            Ok(_) => {
                 cleanup?;
                 files_cleanup?;
                 Ok(())

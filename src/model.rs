@@ -284,11 +284,31 @@ pub struct RenderLine {
     pub spans: Vec<RenderSpan>,
 }
 
+/// Herdr pane or tab that an open action on a Herdr id focuses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HerdrTarget {
+    Pane(PaneId),
+    Tab(String),
+}
+
+impl HerdrTarget {
+    /// Parses an id that matched the `herdr-id` pattern, like `w2D:p25` or `w2D:tF`.
+    pub fn parse(id: &str) -> Option<Self> {
+        let (_, local) = id.split_once(':')?;
+        match local.chars().next()? {
+            'p' => Some(Self::Pane(PaneId::new(id))),
+            't' => Some(Self::Tab(id.to_string())),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PickerOutcome {
     Copied { text: String },
     OpenedUrl { url: String },
     OpenRequested { text: String },
+    JumpRequested { target: HerdrTarget },
     Cancelled,
     NoMatches,
 }

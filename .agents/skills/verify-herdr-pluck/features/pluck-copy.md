@@ -4,7 +4,7 @@ With a pane focused, the user invokes **Pluck visible token**. A temporary `Herd
 
 ## Sub-features
 
-- `pluck-builtins` hints URLs, `file://` URLs, paths, SHAs, UUIDs, IPv4 addresses, hex literals, Kubernetes references, and long numbers.
+- `pluck-builtins` hints URLs, `file://` URLs, paths, SHAs, UUIDs, IPv4 addresses, hex literals, Kubernetes references, long numbers, and Herdr pane ids.
 - `pluck-copy` copies exactly the selected token, with no trailing newline.
 - `pluck-dup` gives identical text the same hint everywhere it appears.
 - `pluck-trim` drops sentence punctuation that trails a URL or path.
@@ -22,10 +22,11 @@ Preconditions:
 
 - Baseline from the [index](./README.md). The source pane is focused.
 
-- **Hint every built-in.** Run `$V seed tokens.txt` and `$V invoke pluck`. In `picker.txt`, every value column has a hint over its first characters: `attps://…`, `sile:///…`, `drc/picker/session.rs`, `fa63023f`, `g23e4567-…`, `h92.168.40.12`, `jxdeadBEEF`, `keployment.apps/frontend`, `l876543210123`, and `qttps://example.com/trailing.`.
+- **Hint every built-in.** Run `$V seed tokens.txt` and `$V invoke pluck`. In `picker.txt`, every value column has a hint over its first characters: `attps://…`, `sile:///…`, `drc/picker/session.rs`, `fa63023f`, `g23e4567-…`, `h92.168.40.12`, `jxdeadBEEF`, `keployment.apps/frontend`, `l876543210123`, `qttps://example.com/trailing.`, and `w1:p1`. The `w` hint covers the leading `w` of the Herdr id, so that row looks unchanged.
 - **Duplicates share a hint.** In the same screen, both `src/picker/session.rs` rows show the same hint (`d`).
 - **Copy.** Run `$V select d`. `clipboard: src/picker/session.rs`, and `focused:` is the source pane.
 - **Trailing punctuation.** Run `$V invoke pluck` and `$V select q`. `clipboard: https://example.com/trailing`, without the period.
+- **Copy a Herdr id.** Run `$V invoke pluck` and `$V select w`. `clipboard: w1:p1`, and `focused:` is the source pane. The uppercase hint jumps instead, see [jump](./jump.md).
 - **Two-letter hints.** Run `$V seed many.txt` and `$V invoke pluck`. The 30 IPs show `aa`, `as`, … `sf`. Run `$V select s d`. `clipboard: 10.0.0.29`.
 - **Cancel.** Run `$V invoke pluck` and `$V select esc`, then `$V invoke pluck` and `$V select ctrl+c`. Both report `clipboard: <untouched>` and refocus the source pane.
 

@@ -4,7 +4,7 @@ use crate::herdr::layout::{
 };
 use crate::herdr::snapshot::{build_source_snapshot, PickerLaunchFiles};
 use crate::model::{
-    LayoutNode, OpenSettings, PaneId, PatternSpec, PickerAction, PickerOutcome,
+    HerdrTarget, LayoutNode, OpenSettings, PaneId, PatternSpec, PickerAction, PickerOutcome,
     PickerReturnContext, PickerScope, PickerSnapshot, SourcePaneGeometry,
 };
 use crate::viewport::map_visible_viewport;
@@ -120,7 +120,7 @@ pub fn launch_layout_tab_picker<C: HerdrClient>(
     let focus_result = client.focus_pane(&applied.picker_pane_id);
 
     if let Err(error) = focus_result.and_then(|_| files.signal_ready()) {
-        if let Err(cleanup) = cleanup_session(client, &return_context, &applied.tab_id) {
+        if let Err(cleanup) = cleanup_session(client, &return_context, &applied.tab_id, None) {
             eprintln!("launch cleanup also failed: {cleanup:#}");
         }
 
@@ -195,11 +195,14 @@ fn layout_target_is_focused(
             .any(|p| p.pane_id == target.0 && p.focused)
 }
 
-/// Restores the source tab and closes only the explicit temporary tab.
+/// Focuses the jump target, or else the source tab, and closes only the explicit temporary tab.
+///
+/// Closing the temporary tab ends the picker process inside it, so nothing runs after the close.
 pub fn cleanup_session<C: HerdrClient>(
     client: &mut C,
     session: &PickerReturnContext,
     temporary_tab_id: &str,
+    jump_target: Option<&HerdrTarget>,
 ) -> Result<()> {
     if temporary_tab_id.is_empty() {
         bail!("temporary picker tab id is missing");
@@ -214,7 +217,7 @@ pub fn cleanup_session<C: HerdrClient>(
 
     let mut first = None;
 
-    if let Err(e) = client.focus_tab(&session.return_tab_id) {
+    if let Err(e) = focus_after_picker(client, session, jump_target) {
         first = Some(e);
     }
 
@@ -225,6 +228,25 @@ pub fn cleanup_session<C: HerdrClient>(
     }
 
     first.map_or(Ok(()), Err)
+}
+
+fn focus_after_picker<C: HerdrClient>(
+    client: &mut C,
+    session: &PickerReturnContext,
+    jump_target: Option<&HerdrTarget>,
+) -> Result<()> {
+    let Some(target) = jump_target else {
+        return client.focus_tab(&session.return_tab_id);
+    };
+    // Herdr switches workspace and tab to focus a pane in another one.
+    let jumped = match target {
+        HerdrTarget::Pane(pane_id) => client.focus_pane(pane_id),
+        HerdrTarget::Tab(tab_id) => client.focus_tab(tab_id),
+    };
+    if jumped.is_err() {
+        let _ = client.focus_tab(&session.return_tab_id);
+    }
+    jumped
 }
 
 pub fn zoom_picker<C: HerdrClient>(
@@ -723,14 +745,55 @@ mod tests {
             ..FakeClient::default()
         };
 
-        let error = cleanup_session(&mut client, &session, "w1:t2").unwrap_err();
+        let error = cleanup_session(&mut client, &session, "w1:t2", None).unwrap_err();
 
         assert_eq!(error.to_string(), "tab focus failed");
         assert_eq!(client.calls, ["focus_tab:w1:t1", "close_tab:w1:t2"]);
-        assert!(cleanup_session(&mut client, &session, "w1:t1")
+        assert!(cleanup_session(&mut client, &session, "w1:t1", None)
             .unwrap_err()
             .to_string()
             .contains("refusing"));
+    }
+
+    #[test]
+    fn cleanup_focuses_jump_target_before_closing_picker_tab() {
+        let session = picker_snapshot(false).session;
+        let cases = [
+            (
+                HerdrTarget::Pane(PaneId::new("w2D:p25")),
+                "focus_pane:w2D:p25",
+            ),
+            (HerdrTarget::Tab("w2D:tF".to_string()), "focus_tab:w2D:tF"),
+        ];
+        for (target, focus_call) in cases {
+            let mut client = FakeClient {
+                launch_paths: Some(("/missing/snapshot".into(), "/missing/ready".into())),
+                ..FakeClient::default()
+            };
+
+            cleanup_session(&mut client, &session, "w1:t2", Some(&target)).unwrap();
+
+            assert_eq!(client.calls, [focus_call, "close_tab:w1:t2"]);
+        }
+    }
+
+    #[test]
+    fn cleanup_returns_to_source_tab_when_jump_fails() {
+        let session = picker_snapshot(false).session;
+        let mut client = FakeClient {
+            launch_paths: Some(("/missing/snapshot".into(), "/missing/ready".into())),
+            fail_focus_pane: true,
+            ..FakeClient::default()
+        };
+        let target = HerdrTarget::Pane(PaneId::new("w9:p9"));
+
+        let error = cleanup_session(&mut client, &session, "w1:t2", Some(&target)).unwrap_err();
+
+        assert_eq!(error.to_string(), "focus failed");
+        assert_eq!(
+            client.calls,
+            ["focus_pane:w9:p9", "focus_tab:w1:t1", "close_tab:w1:t2"]
+        );
     }
 
     #[test]

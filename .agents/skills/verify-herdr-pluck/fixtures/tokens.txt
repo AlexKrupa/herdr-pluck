@@ -9,4 +9,5 @@ k8s      deployment.apps/frontend
 number   9876543210123
 dup      src/picker/session.rs
 trailing see https://example.com/trailing.
+herdr    w1:p1
 end-of-fixture

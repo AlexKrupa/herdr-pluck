@@ -20,7 +20,7 @@ Preconditions:
 
 - Baseline from the [index](./README.md). The source pane is focused.
 
-- **Only URLs are hinted.** Run `$V seed tokens.txt` and `$V invoke open-url`. In `picker.txt` the `url`, `file`, and `trailing` rows have hints (`a`, `s`, `d`). The path, SHA, UUID, IP, hex, k8s, and number rows are unchanged.
+- **Only URLs are hinted.** Run `$V seed tokens.txt` and `$V invoke open-url`. In `picker.txt` the `url`, `file`, and `trailing` rows have hints (`a`, `s`, `d`). The path, SHA, UUID, IP, hex, k8s, number, and herdr rows are unchanged.
 - **Open a `file://` URL.** Run `$V select s`. `opened: file:///tmp/herdr-pluck/report.html` and `clipboard: <untouched>`.
 - **Open an `https://` URL.** Run `$V invoke open-url` and `$V select a`. `opened: https://example.com/docs/getting-started`.
 - **Empty state.** Run `$V seed no-urls.txt` and `$V invoke open-url`. The picker reads `Herdr Pluck: no openable URLs found` / `Press any non-Enter key to close`. Run `$V select x`. Nothing is opened.

@@ -17,6 +17,8 @@ Fork of [rmarganti/herdr-pluck](https://github.com/rmarganti/herdr-pluck). Diffe
 - A `pluck-all` action hints matches in every pane of the tab at once. Hints run in reading order
   across panes. Above the hint capacity, the panes drop matches in turn, so one pane cannot use it
   all. The `[open]` command runs in the directory of the pane the match came from.
+- Herdr pane and tab ids such as `w2D:p25` and `w2D:tF` are hinted. An uppercase hint on one
+  [jumps to that pane or tab](#jump-to-a-herdr-pane-or-tab) instead of running the `[open]` command.
 - The build always compiles from source, because this fork doesn't publish release binaries.
 - Upstream's `open-url` action is still available: lowercase hints unchanged, uppercase hint 
   has the `[open]` behavior too.
@@ -150,12 +152,13 @@ Herdr Pluck recognizes these built-in token types, in priority order:
 2. Git status paths, Git upstream branch names, and diff paths
 3. Kubernetes resource references such as `pod/nginx` or `deployment.apps/frontend`
 4. File paths
-5. UUIDs
-6. Deployment-managed Kubernetes pod names
-7. Git SHAs
-8. Hex literals such as `0xdeadBEEF`
-9. IPv4 addresses
-10. Long numeric identifiers
+5. Herdr pane and tab ids such as `w2D:p25` or `w2D:tF`
+6. UUIDs
+7. Deployment-managed Kubernetes pod names
+8. Git SHAs
+9. Hex literals such as `0xdeadBEEF`
+10. IPv4 addresses
+11. Long numeric identifiers
 
 Custom global patterns can be added in the plugin config directory:
 
@@ -198,10 +201,20 @@ Lower `priority` values win overlapping matches. If omitted, custom pattern prio
 
 When identical text appears more than once, every visible occurrence shows the same hint and copies the same text.
 
+## Jump to a Herdr pane or tab
+
+Herdr pane ids (`w2D:p25`) and tab ids (`w2D:tF`) get hints. They show up in `herdr` CLI output,
+agent replies, and logs. A lowercase hint copies the id. A <kbd>Shift</kbd> hint focuses that pane
+or tab, also in another tab or workspace, and does not run the open command. If the id is stale,
+focus returns to the source tab.
+
+Bare workspace ids such as `wV` are not hinted, because ordinary words match them too.
+
 ## Open action
 
 Type a hint in lowercase to copy the match. Type it with <kbd>Shift</kbd> to run the open command
-instead. One uppercase character is enough for a two-character hint.
+instead. One uppercase character is enough for a two-character hint. Herdr ids are the exception:
+see [Jump to a Herdr pane or tab](#jump-to-a-herdr-pane-or-tab).
 
 With no command configured, the match goes to the system URL opener - `open` on macOS, `xdg-open`
 on Linux - from Herdr's working directory, so relative paths do not resolve against the source pane.

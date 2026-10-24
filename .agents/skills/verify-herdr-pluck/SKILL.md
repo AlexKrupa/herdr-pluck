@@ -118,5 +118,6 @@ Never run `herdr server stop` or `herdr session stop` yourself, never kill Herdr
 - `fixtures/many.txt` holds 30 unique IPs, which forces two-letter hints.
 - `fixtures/no-urls.txt` holds tokens but no URLs, for the open-url empty state.
 - `fixtures/custom-patterns.txt` holds text matched only by the custom patterns.
+- `fixtures/herdr-ids.txt` holds the first pane id and tab id of a fresh run, for the jump journey.
 - `fixtures/global-config.toml` is the private global config: `global-ticket`, `global-prec`, and `build-id`.
 - `fixtures/project-config.toml` is the project-local config: `ticket`, `trace-id` (with a `match` capture), and `project-prec`.

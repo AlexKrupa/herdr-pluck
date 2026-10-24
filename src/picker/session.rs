@@ -1,7 +1,8 @@
 use crate::clipboard::{Clipboard, SystemClipboard};
 use crate::model::{
-    PickerAction, PickerOutcome, PickerSnapshot, RenderLine, RenderSpan, RenderStyle,
+    HerdrTarget, PickerAction, PickerOutcome, PickerSnapshot, RenderLine, RenderSpan, RenderStyle,
 };
+use crate::patterns::HERDR_ID_PATTERN;
 use crate::picker::copy::copy_selected_text;
 use crate::picker::input::{
     CrosstermInputSource, CursorGuard, InputDecision, InputSource, InputState, PickerInputEvent,
@@ -77,12 +78,21 @@ where
                 return outcome;
             }
             InputDecision::OpenHint(hint) => {
-                let text = view
+                let assignment = view
                     .assignments
-                    .copied_text_for_hint(&hint)
+                    .assignment_for_hint(&hint)
                     .ok_or_else(|| anyhow!("accepted unknown picker hint {hint}"))?;
-                return Ok(PickerOutcome::OpenRequested {
-                    text: text.to_string(),
+                let jump_target = assignment
+                    .occurrences
+                    .iter()
+                    .any(|span| span.pattern == HERDR_ID_PATTERN)
+                    .then(|| HerdrTarget::parse(&assignment.text))
+                    .flatten();
+                return Ok(match jump_target {
+                    Some(target) => PickerOutcome::JumpRequested { target },
+                    None => PickerOutcome::OpenRequested {
+                        text: assignment.text.clone(),
+                    },
                 });
             }
         }
@@ -128,8 +138,8 @@ mod tests {
     use super::*;
     use crate::clipboard::{ClipboardError, CopySuccess};
     use crate::model::{
-        OpenSettings, PaneId, PaneTextCaptureMode, PickerReturnContext, PickerScope, Rect,
-        SourcePaneGeometry, SourcePaneSnapshot,
+        HerdrTarget, OpenSettings, PaneId, PaneTextCaptureMode, PickerReturnContext, PickerScope,
+        Rect, SourcePaneGeometry, SourcePaneSnapshot,
     };
     use crate::url_opener::{OpenUrlSuccess, UrlOpenError};
     use std::cell::RefCell;
@@ -356,6 +366,56 @@ mod tests {
         );
         assert!(clipboard.copied.borrow().is_empty());
         assert!(opener.opened.borrow().is_empty());
+    }
+
+    #[test]
+    fn uppercase_hint_on_herdr_id_requests_jump_without_opening() {
+        let cases = [
+            ('A', HerdrTarget::Pane(PaneId::new("w2D:p25"))),
+            ('S', HerdrTarget::Tab("w2D:tF".to_string())),
+        ];
+        for (key, target) in cases {
+            let mut input = FakeInput::new(vec![PickerInputEvent::Char(key)]);
+            let clipboard = FakeClipboard::default();
+            let opener = FakeUrlOpener::default();
+            let mut output = Vec::new();
+
+            let outcome = run_picker_with(
+                &snapshot(vec!["pane w2D:p25 tab w2D:tF"], 40, 1),
+                &mut input,
+                &clipboard,
+                &opener,
+                &mut output,
+            )
+            .unwrap();
+
+            assert_eq!(outcome, PickerOutcome::JumpRequested { target });
+            assert!(clipboard.copied.borrow().is_empty());
+            assert!(opener.opened.borrow().is_empty());
+        }
+    }
+
+    #[test]
+    fn lowercase_hint_on_herdr_id_copies_it() {
+        let mut input = FakeInput::new(vec![PickerInputEvent::Char('a')]);
+        let clipboard = FakeClipboard::default();
+        let mut output = Vec::new();
+
+        let outcome = run_picker_with(
+            &snapshot(vec!["pane w2D:p25"], 40, 1),
+            &mut input,
+            &clipboard,
+            &FakeUrlOpener::default(),
+            &mut output,
+        )
+        .unwrap();
+
+        assert_eq!(
+            outcome,
+            PickerOutcome::Copied {
+                text: "w2D:p25".to_string()
+            }
+        );
     }
 
     #[test]

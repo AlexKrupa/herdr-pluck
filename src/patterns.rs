@@ -4,6 +4,9 @@ use std::sync::OnceLock;
 
 static BUILT_IN_PATTERNS: OnceLock<Vec<PatternDefinition>> = OnceLock::new();
 
+/// Built-in pattern for Herdr pane and tab ids, whose open action focuses the id.
+pub const HERDR_ID_PATTERN: &str = "herdr-id";
+
 const KUBERNETES_RESOURCE_KINDS: &str = "deployment.app|binding|componentstatuse|configmap|endpoint|event|limitrange|namespace|node|persistentvolumeclaim|persistentvolume|pod|podtemplate|replicationcontroller|resourcequota|secret|serviceaccount|service|mutatingwebhookconfiguration.admissionregistration.k8s.io|validatingwebhookconfiguration.admissionregistration.k8s.io|customresourcedefinition.apiextension.k8s.io|apiservice.apiregistration.k8s.io|controllerrevision.apps|daemonset.apps|deployment.apps|replicaset.apps|statefulset.apps|tokenreview.authentication.k8s.io|localsubjectaccessreview.authorization.k8s.io|selfsubjectaccessreviews.authorization.k8s.io|selfsubjectrulesreview.authorization.k8s.io|subjectaccessreview.authorization.k8s.io|horizontalpodautoscaler.autoscaling|cronjob.batch|job.batch|certificatesigningrequest.certificates.k8s.io|events.events.k8s.io|daemonset.extensions|deployment.extensions|ingress.extensions|networkpolicies.extensions|podsecuritypolicies.extensions|replicaset.extensions|networkpolicie.networking.k8s.io|poddisruptionbudget.policy|clusterrolebinding.rbac.authorization.k8s.io|clusterrole.rbac.authorization.k8s.io|rolebinding.rbac.authorization.k8s.io|role.rbac.authorization.k8s.io|storageclasse.storage.k8s.io";
 
 #[derive(Debug)]
@@ -121,6 +124,12 @@ fn built_in_patterns() -> &'static [PatternDefinition] {
                 &format!(r#"\b({KUBERNETES_RESOURCE_KINDS})([/_#$%&+=@-][[:alnum:]_#$%&+=/@-]*)?\b"#),
             ),
             PatternDefinition::compile_trimmed("path", 20, r#"(([.\w\-~\$@]+)?(/[.\w\-@]+)+/?)"#),
+            // Herdr's public id alphabet. Bare workspace ids like `wV` collide with ordinary words.
+            PatternDefinition::compile(
+                HERDR_ID_PATTERN,
+                22,
+                r#"\bw[0-9A-HJKMNP-TV-Z]+:[pt][0-9A-HJKMNP-TV-Z]+\b"#,
+            ),
             PatternDefinition::compile(
                 "uuid",
                 30,
@@ -457,6 +466,29 @@ mod tests {
         assert!(!matches
             .iter()
             .any(|span| span.pattern == "number" && span.text == "1234"));
+    }
+
+    #[test]
+    fn finds_herdr_pane_and_tab_ids_but_not_bare_workspace_ids() {
+        let matches = find_matches_with_defaults_only(&lines([
+            "pane w2D:p25 tab w2D:tF workspace wV lower w2d:p25 excluded wI:p1",
+        ]));
+        let ids: Vec<&str> = matches
+            .iter()
+            .filter(|span| span.pattern == HERDR_ID_PATTERN)
+            .map(|span| span.text.as_str())
+            .collect();
+
+        assert_eq!(ids, vec!["w2D:p25", "w2D:tF"]);
+    }
+
+    #[test]
+    fn herdr_id_wins_over_number_submatch() {
+        let matches = find_matches_with_defaults_only(&lines(["w1234:p5678"]));
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].pattern, HERDR_ID_PATTERN);
+        assert_eq!(matches[0].text, "w1234:p5678");
     }
 
     #[test]

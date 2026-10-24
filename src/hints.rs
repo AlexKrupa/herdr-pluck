@@ -40,6 +40,12 @@ impl HintAssignments {
         self.assignments
     }
 
+    pub fn assignment_for_hint(&self, hint: &str) -> Option<&HintAssignment> {
+        self.assignments
+            .iter()
+            .find(|assignment| assignment.hint == hint)
+    }
+
     pub fn copied_text_for_hint(&self, hint: &str) -> Option<&str> {
         self.assignments
             .iter()
